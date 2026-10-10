@@ -71,6 +71,61 @@ function getSales() {
   return getAllRows(SHEET_NAMES.sales);
 }
 
+function getInventoryByVolunteer(stockOwnerName) {
+  const stockRows = getStock();
+  const salesRows = getSales();
+  const summaryMap = {};
+  const normalizedFilter = String(stockOwnerName || '').trim();
+
+  stockRows.forEach((row) => {
+    const bookName = String(row.bookName || '').trim();
+    const volunteerName = String(row.volunteerName || '').trim();
+    const quantity = Number(row.quantityReceived || 0);
+
+    if (!bookName || !volunteerName || !Number.isFinite(quantity)) {
+      return;
+    }
+
+    if (normalizedFilter && volunteerName !== normalizedFilter) {
+      return;
+    }
+
+    const key = volunteerName + '|' + bookName;
+    summaryMap[key] = (summaryMap[key] || 0) + quantity;
+  });
+
+  salesRows.forEach((row) => {
+    const bookName = String(row.bookName || '').trim();
+    const volunteerName = String(row.stockOwnerName || '').trim();
+    const quantity = Number(row.quantity || 0);
+
+    if (!bookName || !volunteerName || !Number.isFinite(quantity)) {
+      return;
+    }
+
+    if (normalizedFilter && volunteerName !== normalizedFilter) {
+      return;
+    }
+
+    const key = volunteerName + '|' + bookName;
+    summaryMap[key] = (summaryMap[key] || 0) - quantity;
+  });
+
+  return Object.keys(summaryMap)
+    .sort()
+    .map((key) => {
+      const [volunteerName, bookName] = key.split('|');
+      const available = Number(summaryMap[key]) || 0;
+
+      return {
+        volunteerName: volunteerName || '',
+        bookName: bookName || '',
+        quantity: available > 0 ? available : 0
+      };
+    })
+    .filter((row) => row.volunteerName && row.bookName && row.quantity > 0);
+}
+
 function getLookupData() {
   const books = getBooks();
   const volunteers = getVolunteers();
@@ -217,6 +272,129 @@ function getAvailableStockForBookAndOwner(bookName, stockOwnerName) {
   return totalReceived - soldQuantity;
 }
 
+function updateStockAfterSale(bookName, stockOwnerName, quantity) {
+  const stockSheet = getSheetByName(SHEET_NAMES.stock);
+  const rows = stockSheet.getDataRange().getValues();
+
+  if (rows.length <= 1) {
+    throw new Error('No stock rows found for this book and owner.');
+  }
+
+  const headers = rows[0];
+  const bookIndex = headers.indexOf('bookName');
+  const ownerIndex = headers.indexOf('volunteerName');
+  const qtyIndex = headers.indexOf('quantityReceived');
+
+  if (bookIndex === -1 || ownerIndex === -1 || qtyIndex === -1) {
+    throw new Error('Stock sheet is missing required columns: bookName, volunteerName, or quantityReceived.');
+  }
+
+  for (let i = 1; i < rows.length; i++) {
+    const row = rows[i];
+    const rowBookName = String(row[bookIndex] || '').trim();
+    const rowOwnerName = String(row[ownerIndex] || '').trim();
+
+    if (rowBookName === String(bookName).trim() && rowOwnerName === String(stockOwnerName).trim()) {
+      const currentQty = Number(row[qtyIndex] || 0);
+      const updatedQty = currentQty - Number(quantity);
+
+      if (updatedQty < 0) {
+        throw new Error('Stock would go negative.');
+      }
+
+      stockSheet.getRange(i + 1, qtyIndex + 1).setValue(updatedQty);
+      return;
+    }
+  }
+
+  throw new Error('No stock row found for this book and owner.');
+}
+
+function validateStockEntry(data) {
+  if (!data) {
+    throw new Error('No stock data was provided.');
+  }
+
+  const bookName = String(data.bookName || '').trim();
+  if (!bookName) {
+    throw new Error('Missing required field: bookName');
+  }
+
+  if (!getBookByName(bookName)) {
+    throw new Error('Book not found: ' + bookName);
+  }
+
+  const volunteerName = String(data.volunteerName || '').trim();
+  if (!volunteerName) {
+    throw new Error('Missing required field: volunteerName');
+  }
+
+  const quantityReceived = Number(data.quantityReceived);
+  if (!Number.isInteger(quantityReceived) || quantityReceived <= 0) {
+    throw new Error('Quantity received must be a positive whole number.');
+  }
+
+  return {
+    bookName: bookName,
+    volunteerName: volunteerName,
+    quantityReceived: quantityReceived
+  };
+}
+
+function addStock(data) {
+  const cleanedData = validateStockEntry(data);
+  const stockSheet = getSheetByName(SHEET_NAMES.stock);
+  const rows = stockSheet.getDataRange().getValues();
+
+  const headers = rows.length
+    ? rows[0]
+    : ['stockId', 'bookName', 'volunteerName', 'quantityReceived'];
+
+  const bookIndex = headers.indexOf('bookName');
+  const ownerIndex = headers.indexOf('volunteerName');
+  const qtyIndex = headers.indexOf('quantityReceived');
+  const stockIdIndex = headers.indexOf('stockId');
+
+  if (bookIndex === -1 || ownerIndex === -1 || qtyIndex === -1) {
+    throw new Error('Stock sheet is missing required columns: bookName, volunteerName, or quantityReceived.');
+  }
+
+  if (rows.length === 0) {
+    stockSheet.appendRow(headers);
+  }
+
+  for (let i = 1; i < rows.length; i++) {
+    const row = rows[i] || [];
+    const rowBookName = String(row[bookIndex] || '').trim();
+    const rowVolunteerName = String(row[ownerIndex] || '').trim();
+
+    if (rowBookName === cleanedData.bookName && rowVolunteerName === cleanedData.volunteerName) {
+      const currentQty = Number(row[qtyIndex] || 0);
+      const updatedQty = currentQty + cleanedData.quantityReceived;
+      stockSheet.getRange(i + 1, qtyIndex + 1).setValue(updatedQty);
+      return {
+        success: true,
+        message: 'Stock added successfully.'
+      };
+    }
+  }
+
+  const newRow = Array(headers.length).fill('');
+  if (stockIdIndex !== -1) {
+    newRow[stockIdIndex] = '';
+  }
+  newRow[bookIndex] = cleanedData.bookName;
+  newRow[ownerIndex] = cleanedData.volunteerName;
+  newRow[qtyIndex] = cleanedData.quantityReceived;
+
+  stockSheet.appendRow(newRow);
+
+  return {
+    success: true,
+    message: 'Stock added successfully.'
+  };
+}
+
 function recordSale(data) {
   const cleanedData = validateSaleRequest(data);
   const eventId = createOrFindEvent(cleanedData.eventLocation, cleanedData.eventDate);
@@ -229,6 +407,8 @@ function recordSale(data) {
   if (cleanedData.quantity > availableStock) {
     throw new Error('Sale cannot exceed the available stock for this book and stock owner.');
   }
+
+  updateStockAfterSale(cleanedData.bookName, cleanedData.stockOwnerName, cleanedData.quantity);
 
   const salesSheet = getSheetByName(SHEET_NAMES.sales);
   const saleId = 'SALE-' + Date.now();
@@ -253,5 +433,5 @@ function recordSale(data) {
 }
 
 function doGet() {
-  return HtmlService.createHtmlOutputFromFile('index');
+  return HtmlService.createHtmlOutputFromFile('Index');
 }
