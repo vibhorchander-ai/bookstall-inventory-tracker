@@ -87,13 +87,31 @@ function getLookupData() {
   };
 }
 
+function getBookByName(bookName) {
+  const books = getBooks();
+  const matchedBook = books.find((book) => {
+    return String(book.bookName || book.name || '').trim() === String(bookName || '').trim();
+  });
+
+  return matchedBook || null;
+}
+
 function validateSaleRequest(data) {
   if (!data) {
     throw new Error('No entry data was provided.');
   }
 
+  const normalizedBookName = String(data.bookName || '').trim();
+  if (!normalizedBookName) {
+    throw new Error('Missing required field: bookName');
+  }
+
+  const matchedBook = getBookByName(normalizedBookName);
+  if (!matchedBook) {
+    throw new Error('Book not found: ' + normalizedBookName);
+  }
+
   const requiredFields = [
-    'bookId',
     'eventLocation',
     'eventDate',
     'sellerName',
@@ -110,10 +128,6 @@ function validateSaleRequest(data) {
     }
   });
 
-  if (String(data.sellerName).trim() === String(data.stockOwnerName).trim()) {
-    throw new Error('Volunteer and stock owner must be different people.');
-  }
-
   const quantity = Number(data.quantity);
   if (!Number.isInteger(quantity) || quantity <= 0) {
     throw new Error('Quantity must be a positive whole number.');
@@ -125,7 +139,8 @@ function validateSaleRequest(data) {
   }
 
   return {
-    bookId: String(data.bookId).trim(),
+    bookId: String(matchedBook.bookId || '').trim(),
+    bookName: normalizedBookName,
     eventLocation: String(data.eventLocation).trim(),
     eventDate: String(data.eventDate).trim(),
     sellerName: String(data.sellerName).trim(),
@@ -168,13 +183,16 @@ function createOrFindEvent(eventLocation, eventDate) {
   return eventId;
 }
 
-function getAvailableStockForBookAndOwner(bookId, stockOwnerName) {
+function getAvailableStockForBookAndOwner(bookName, stockOwnerName) {
   const stockRows = getStock();
   const salesRows = getSales();
+  const normalizedBookName = String(bookName || '').trim();
 
   const matchingStock = stockRows.filter((row) => {
-    return String(row.bookId).trim() === String(bookId).trim() &&
-      String(row.volunteerName).trim() === String(stockOwnerName).trim();
+    const rowBookName = String(row.bookName || row.name || '').trim();
+    const rowOwner = String(row.volunteerName || '').trim();
+
+    return rowBookName && normalizedBookName && rowBookName === normalizedBookName && rowOwner === String(stockOwnerName).trim();
   });
 
   const totalReceived = matchingStock.reduce((sum, row) => {
@@ -183,7 +201,9 @@ function getAvailableStockForBookAndOwner(bookId, stockOwnerName) {
   }, 0);
 
   const soldQuantity = salesRows.reduce((sum, row) => {
-    const matchesBook = String(row.bookId).trim() === String(bookId).trim();
+    const rowBookName = String(row.bookName || row.bookId || '').trim();
+    const matchesBook = rowBookName === normalizedBookName ||
+      String(row.bookId || '').trim() === String(getBookByName(normalizedBookName)?.bookId || '').trim();
     const matchesOwner = String(row.stockOwnerName).trim() === String(stockOwnerName).trim();
 
     if (matchesBook && matchesOwner) {
@@ -202,7 +222,7 @@ function recordSale(data) {
   const eventId = createOrFindEvent(cleanedData.eventLocation, cleanedData.eventDate);
 
   const availableStock = getAvailableStockForBookAndOwner(
-    cleanedData.bookId,
+    cleanedData.bookName,
     cleanedData.stockOwnerName
   );
 
@@ -216,7 +236,7 @@ function recordSale(data) {
   salesSheet.appendRow([
     saleId,
     new Date().toISOString(),
-    cleanedData.bookId,
+    cleanedData.bookName,
     eventId,
     cleanedData.sellerName,
     cleanedData.stockOwnerName,

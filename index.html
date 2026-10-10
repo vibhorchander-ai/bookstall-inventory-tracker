@@ -137,7 +137,7 @@
         <div class="row">
           <div>
             <label>Book
-              <select id="bookId" required></select>
+              <select id="bookName" required></select>
             </label>
           </div>
 
@@ -223,7 +223,7 @@
       function loadLookupData() {
         google.script.run
           .withSuccessHandler((result) => {
-            populateSelect('bookId', result.books, 'bookId', 'name');
+            populateSelect('bookName', result.books, 'bookName', 'bookName');
             populateSelect('sellerName', result.volunteers, 'name', 'name');
             populateSelect('stockOwnerName', result.volunteers, 'name', 'name');
           })
@@ -234,7 +234,7 @@
         event.preventDefault();
 
         const payload = {
-          bookId: document.getElementById('bookId').value,
+          bookName: document.getElementById('bookName').value,
           eventLocation: document.getElementById('eventLocation').value,
           eventDate: document.getElementById('eventDate').value,
           sellerName: document.getElementById('sellerName').value,
