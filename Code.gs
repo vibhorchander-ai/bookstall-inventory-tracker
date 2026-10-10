@@ -73,14 +73,13 @@ function getSales() {
 
 function getInventoryByVolunteer(stockOwnerName) {
   const stockRows = getStock();
-  const salesRows = getSales();
   const summaryMap = {};
   const normalizedFilter = String(stockOwnerName || '').trim();
 
   stockRows.forEach((row) => {
-    const bookName = String(row.bookName || '').trim();
+    const bookName = String(row.bookName || row.name || '').trim();
     const volunteerName = String(row.volunteerName || '').trim();
-    const quantity = Number(row.quantityReceived || 0);
+    const quantity = Number(row.quantityRemaining ?? row.quantityReceived ?? 0);
 
     if (!bookName || !volunteerName || !Number.isFinite(quantity)) {
       return;
@@ -94,33 +93,16 @@ function getInventoryByVolunteer(stockOwnerName) {
     summaryMap[key] = (summaryMap[key] || 0) + quantity;
   });
 
-  salesRows.forEach((row) => {
-    const bookName = String(row.bookName || '').trim();
-    const volunteerName = String(row.stockOwnerName || '').trim();
-    const quantity = Number(row.quantity || 0);
-
-    if (!bookName || !volunteerName || !Number.isFinite(quantity)) {
-      return;
-    }
-
-    if (normalizedFilter && volunteerName !== normalizedFilter) {
-      return;
-    }
-
-    const key = volunteerName + '|' + bookName;
-    summaryMap[key] = (summaryMap[key] || 0) - quantity;
-  });
-
   return Object.keys(summaryMap)
     .sort()
     .map((key) => {
       const [volunteerName, bookName] = key.split('|');
-      const available = Number(summaryMap[key]) || 0;
+      const quantity = Number(summaryMap[key]) || 0;
 
       return {
         volunteerName: volunteerName || '',
         bookName: bookName || '',
-        quantity: available > 0 ? available : 0
+        quantity: quantity > 0 ? quantity : 0
       };
     })
     .filter((row) => row.volunteerName && row.bookName && row.quantity > 0);
@@ -151,6 +133,34 @@ function getBookByName(bookName) {
   return matchedBook || null;
 }
 
+function getBookById(bookId) {
+  const books = getBooks();
+  const matchedBook = books.find((book) => {
+    return String(book.bookId || '').trim() === String(bookId || '').trim();
+  });
+
+  return matchedBook || null;
+}
+
+function getBookDisplayName(identifier) {
+  const normalized = String(identifier || '').trim();
+  if (!normalized) {
+    return '';
+  }
+
+  const byId = getBookById(normalized);
+  if (byId) {
+    return String(byId.name || byId.bookName || '').trim();
+  }
+
+  const byName = getBookByName(normalized);
+  if (byName) {
+    return String(byName.name || byName.bookName || '').trim();
+  }
+
+  return normalized;
+}
+
 function validateSaleRequest(data) {
   if (!data) {
     throw new Error('No entry data was provided.');
@@ -160,6 +170,8 @@ function validateSaleRequest(data) {
   if (!normalizedBookName) {
     throw new Error('Missing required field: bookName');
   }
+
+  const notes = String(data.notes || '').trim();
 
   const matchedBook = getBookByName(normalizedBookName);
   if (!matchedBook) {
@@ -202,7 +214,8 @@ function validateSaleRequest(data) {
     stockOwnerName: String(data.stockOwnerName).trim(),
     quantity: quantity,
     unitPrice: unitPrice,
-    recordedBy: String(data.recordedBy).trim()
+    recordedBy: String(data.recordedBy).trim(),
+    notes: notes
   };
 }
 
@@ -240,36 +253,19 @@ function createOrFindEvent(eventLocation, eventDate) {
 
 function getAvailableStockForBookAndOwner(bookName, stockOwnerName) {
   const stockRows = getStock();
-  const salesRows = getSales();
   const normalizedBookName = String(bookName || '').trim();
 
   const matchingStock = stockRows.filter((row) => {
     const rowBookName = String(row.bookName || row.name || '').trim();
     const rowOwner = String(row.volunteerName || '').trim();
 
-    return rowBookName && normalizedBookName && rowBookName === normalizedBookName && rowOwner === String(stockOwnerName).trim();
+    return rowBookName === normalizedBookName && rowOwner === String(stockOwnerName).trim();
   });
 
-  const totalReceived = matchingStock.reduce((sum, row) => {
-    const received = Number(row.quantityReceived || 0);
-    return sum + (Number.isFinite(received) ? received : 0);
+  return matchingStock.reduce((sum, row) => {
+    const available = Number(row.quantityRemaining ?? row.quantityReceived ?? 0);
+    return sum + (Number.isFinite(available) ? available : 0);
   }, 0);
-
-  const soldQuantity = salesRows.reduce((sum, row) => {
-    const rowBookName = String(row.bookName || row.bookId || '').trim();
-    const matchesBook = rowBookName === normalizedBookName ||
-      String(row.bookId || '').trim() === String(getBookByName(normalizedBookName)?.bookId || '').trim();
-    const matchesOwner = String(row.stockOwnerName).trim() === String(stockOwnerName).trim();
-
-    if (matchesBook && matchesOwner) {
-      const qty = Number(row.quantity || 0);
-      return sum + (Number.isFinite(qty) ? qty : 0);
-    }
-
-    return sum;
-  }, 0);
-
-  return totalReceived - soldQuantity;
 }
 
 function updateStockAfterSale(bookName, stockOwnerName, quantity) {
@@ -281,28 +277,30 @@ function updateStockAfterSale(bookName, stockOwnerName, quantity) {
   }
 
   const headers = rows[0];
-  const bookIndex = headers.indexOf('bookName');
+  const bookNameIndex = headers.indexOf('bookName');
   const ownerIndex = headers.indexOf('volunteerName');
-  const qtyIndex = headers.indexOf('quantityReceived');
+  const qtyReceivedIndex = headers.indexOf('quantityReceived');
+  const qtyRemainingIndex = headers.indexOf('quantityRemaining');
 
-  if (bookIndex === -1 || ownerIndex === -1 || qtyIndex === -1) {
+  if (bookNameIndex === -1 || ownerIndex === -1 || qtyReceivedIndex === -1) {
     throw new Error('Stock sheet is missing required columns: bookName, volunteerName, or quantityReceived.');
   }
 
   for (let i = 1; i < rows.length; i++) {
     const row = rows[i];
-    const rowBookName = String(row[bookIndex] || '').trim();
+    const rowBookName = String(row[bookNameIndex] || '').trim();
     const rowOwnerName = String(row[ownerIndex] || '').trim();
 
     if (rowBookName === String(bookName).trim() && rowOwnerName === String(stockOwnerName).trim()) {
-      const currentQty = Number(row[qtyIndex] || 0);
+      const currentQty = Number(row[qtyRemainingIndex] ?? row[qtyReceivedIndex] ?? 0);
       const updatedQty = currentQty - Number(quantity);
 
       if (updatedQty < 0) {
         throw new Error('Stock would go negative.');
       }
 
-      stockSheet.getRange(i + 1, qtyIndex + 1).setValue(updatedQty);
+      const targetIndex = qtyRemainingIndex !== -1 ? qtyRemainingIndex : qtyReceivedIndex;
+      stockSheet.getRange(i + 1, targetIndex + 1).setValue(updatedQty);
       return;
     }
   }
@@ -348,14 +346,15 @@ function addStock(data) {
 
   const headers = rows.length
     ? rows[0]
-    : ['stockId', 'bookName', 'volunteerName', 'quantityReceived'];
+    : ['stockId', 'bookName', 'volunteerName', 'quantityReceived', 'quantityRemaining'];
 
-  const bookIndex = headers.indexOf('bookName');
+  const bookNameIndex = headers.indexOf('bookName');
   const ownerIndex = headers.indexOf('volunteerName');
-  const qtyIndex = headers.indexOf('quantityReceived');
+  const qtyReceivedIndex = headers.indexOf('quantityReceived');
+  const qtyRemainingIndex = headers.indexOf('quantityRemaining');
   const stockIdIndex = headers.indexOf('stockId');
 
-  if (bookIndex === -1 || ownerIndex === -1 || qtyIndex === -1) {
+  if (bookNameIndex === -1 || ownerIndex === -1 || qtyReceivedIndex === -1) {
     throw new Error('Stock sheet is missing required columns: bookName, volunteerName, or quantityReceived.');
   }
 
@@ -365,13 +364,14 @@ function addStock(data) {
 
   for (let i = 1; i < rows.length; i++) {
     const row = rows[i] || [];
-    const rowBookName = String(row[bookIndex] || '').trim();
+    const rowBookName = String(row[bookNameIndex] || '').trim();
     const rowVolunteerName = String(row[ownerIndex] || '').trim();
 
     if (rowBookName === cleanedData.bookName && rowVolunteerName === cleanedData.volunteerName) {
-      const currentQty = Number(row[qtyIndex] || 0);
+      const currentQty = Number((qtyRemainingIndex !== -1 ? row[qtyRemainingIndex] : row[qtyReceivedIndex]) ?? 0);
       const updatedQty = currentQty + cleanedData.quantityReceived;
-      stockSheet.getRange(i + 1, qtyIndex + 1).setValue(updatedQty);
+      const targetIndex = qtyRemainingIndex !== -1 ? qtyRemainingIndex : qtyReceivedIndex;
+      stockSheet.getRange(i + 1, targetIndex + 1).setValue(updatedQty);
       return {
         success: true,
         message: 'Stock added successfully.'
@@ -383,9 +383,12 @@ function addStock(data) {
   if (stockIdIndex !== -1) {
     newRow[stockIdIndex] = '';
   }
-  newRow[bookIndex] = cleanedData.bookName;
+  newRow[bookNameIndex] = cleanedData.bookName;
   newRow[ownerIndex] = cleanedData.volunteerName;
-  newRow[qtyIndex] = cleanedData.quantityReceived;
+  newRow[qtyReceivedIndex] = cleanedData.quantityReceived;
+  if (qtyRemainingIndex !== -1) {
+    newRow[qtyRemainingIndex] = cleanedData.quantityReceived;
+  }
 
   stockSheet.appendRow(newRow);
 
@@ -413,7 +416,16 @@ function recordSale(data) {
   const salesSheet = getSheetByName(SHEET_NAMES.sales);
   const saleId = 'SALE-' + Date.now();
 
-  salesSheet.appendRow([
+  const headers = salesSheet.getRange(1, 1, 1, Math.max(1, salesSheet.getLastColumn())).getValues()[0] || [];
+  const notesColumnName = 'notes';
+  const notesIndex = headers.findIndex((header) => String(header || '').trim().toLowerCase() === notesColumnName);
+
+  if (notesIndex === -1 && cleanedData.notes) {
+    salesSheet.getRange(1, headers.length + 1).setValue(notesColumnName);
+    headers.push(notesColumnName);
+  }
+
+  const row = [
     saleId,
     new Date().toISOString(),
     cleanedData.bookName,
@@ -423,7 +435,18 @@ function recordSale(data) {
     cleanedData.quantity,
     cleanedData.unitPrice,
     cleanedData.recordedBy
-  ]);
+  ];
+
+  if (cleanedData.notes) {
+    const targetIndex = headers.findIndex((header) => String(header || '').trim().toLowerCase() === notesColumnName);
+    if (targetIndex >= 0) {
+      const pad = Array(Math.max(0, targetIndex + 1 - row.length)).fill('');
+      row.push(...pad);
+      row[targetIndex] = cleanedData.notes;
+    }
+  }
+
+  salesSheet.appendRow(row);
 
   return {
     success: true,
