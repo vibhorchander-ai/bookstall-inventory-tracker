@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <base target="_top">
+    <style>
+      :root {
+        --bg: #f4f7fb;
+        --card: #ffffff;
+        --primary: #1d4ed8;
+        --primary-dark: #163ea8;
+        --text: #1f2937;
+        --muted: #6b7280;
+        --line: #e5e7eb;
+        --success-bg: #e8f7ee;
+        --success-text: #166534;
+        --error-bg: #fbe8e8;
+        --error-text: #991b1b;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 32px 16px;
+        font-family: Arial, Helvetica, sans-serif;
+        background: linear-gradient(135deg, #eef4ff 0%, #f9fafb 100%);
+        color: var(--text);
+      }
+
+      .card {
+        width: 100%;
+        max-width: 760px;
+        background: var(--card);
+        border: 1px solid var(--line);
+        border-radius: 18px;
+        padding: 28px 26px;
+        box-shadow: 0 12px 30px rgba(20, 30, 60, 0.10);
+      }
+
+      h2 {
+        margin: 0 0 8px;
+        font-size: 30px;
+        font-weight: 700;
+      }
+
+      .subtitle {
+        margin: 0 0 24px;
+        color: var(--muted);
+        font-size: 14px;
+      }
+
+      label {
+        display: block;
+        margin-top: 18px;
+        font-weight: 700;
+        font-size: 14px;
+      }
+
+      input,
+      select,
+      button {
+        width: 100%;
+        margin-top: 8px;
+        padding: 12px 14px;
+        border-radius: 10px;
+        border: 1px solid var(--line);
+        font-size: 15px;
+        outline: none;
+      }
+
+      input:focus,
+      select:focus {
+        border-color: var(--primary);
+        box-shadow: 0 0 0 3px rgba(29, 78, 216, 0.12);
+      }
+
+      button {
+        margin-top: 24px;
+        background: var(--primary);
+        color: white;
+        border: none;
+        font-weight: 700;
+        cursor: pointer;
+        transition: background 0.2s ease;
+      }
+
+      button:hover {
+        background: var(--primary-dark);
+      }
+
+      .message {
+        margin-top: 18px;
+        padding: 12px 14px;
+        border-radius: 10px;
+        display: none;
+        font-size: 14px;
+        font-weight: 600;
+      }
+
+      .success {
+        display: block;
+        background: var(--success-bg);
+        color: var(--success-text);
+      }
+
+      .error {
+        display: block;
+        background: var(--error-bg);
+        color: var(--error-text);
+      }
+
+      .row {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 18px;
+      }
+
+      @media (max-width: 640px) {
+        .row {
+          grid-template-columns: 1fr;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="card">
+      <h2>Inventory Entry</h2>
+      <p class="subtitle">Record a book entry for a stall event.</p>
+
+      <form id="saleForm">
+        <div class="row">
+          <div>
+            <label>Book
+              <select id="bookId" required></select>
+            </label>
+          </div>
+
+          <div>
+            <label>Event Location
+              <input id="eventLocation" type="text" placeholder="Main Hall" required>
+            </label>
+          </div>
+        </div>
+
+        <div class="row">
+          <div>
+            <label>Volunteer
+              <select id="sellerName" required></select>
+            </label>
+          </div>
+
+          <div>
+            <label>Stock Owner
+              <select id="stockOwnerName" required></select>
+            </label>
+          </div>
+        </div>
+
+        <div class="row">
+          <div>
+            <label>Event Date
+              <input id="eventDate" type="date" required>
+            </label>
+          </div>
+
+          <div>
+            <label>Quantity
+              <input id="quantity" type="number" min="1" step="1" required>
+            </label>
+          </div>
+        </div>
+
+        <div class="row">
+          <div>
+            <label>Unit Price
+              <input id="unitPrice" type="number" min="0" step="0.01" required>
+            </label>
+          </div>
+
+          <div>
+            <label>Recorded By
+              <input id="recordedBy" type="text" required>
+            </label>
+          </div>
+        </div>
+
+        <button type="submit">Save Entry</button>
+      </form>
+
+      <div id="messageBox" class="message"></div>
+    </div>
+
+    <script>
+      function showMessage(text, type) {
+        const box = document.getElementById('messageBox');
+        box.textContent = text;
+        box.className = 'message ' + type;
+      }
+
+      function populateSelect(selectId, items, valueKey, labelKey) {
+        const select = document.getElementById(selectId);
+        select.innerHTML = '';
+
+        const emptyOption = document.createElement('option');
+        emptyOption.value = '';
+        emptyOption.textContent = 'Select...';
+        select.appendChild(emptyOption);
+
+        items.forEach((item) => {
+          const option = document.createElement('option');
+          option.value = item[valueKey];
+          option.textContent = item[labelKey];
+          select.appendChild(option);
+        });
+      }
+
+      function loadLookupData() {
+        google.script.run
+          .withSuccessHandler((result) => {
+            populateSelect('bookId', result.books, 'bookId', 'name');
+            populateSelect('sellerName', result.volunteers, 'name', 'name');
+            populateSelect('stockOwnerName', result.volunteers, 'name', 'name');
+          })
+          .getLookupData();
+      }
+
+      document.getElementById('saleForm').addEventListener('submit', function (event) {
+        event.preventDefault();
+
+        const payload = {
+          bookId: document.getElementById('bookId').value,
+          eventLocation: document.getElementById('eventLocation').value,
+          eventDate: document.getElementById('eventDate').value,
+          sellerName: document.getElementById('sellerName').value,
+          stockOwnerName: document.getElementById('stockOwnerName').value,
+          quantity: document.getElementById('quantity').value,
+          unitPrice: document.getElementById('unitPrice').value,
+          recordedBy: document.getElementById('recordedBy').value
+        };
+
+        google.script.run
+          .withSuccessHandler((result) => {
+            showMessage(result.message, 'success');
+            document.getElementById('saleForm').reset();
+          })
+          .withFailureHandler((error) => {
+            showMessage(error.message, 'error');
+          })
+          .recordSale(payload);
+      });
+
+      loadLookupData();
+    </script>
+  </body>
+</html>
