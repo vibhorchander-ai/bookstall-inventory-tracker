@@ -1649,7 +1649,6 @@ ${bookListStr}`;
               addSaleItemRow();
               document.getElementById('saleNotes').value = '';
               loadHistory();
-              google.script.run.withSuccessHandler(onLookupLoaded).getLookupData(token);
             })
             .withFailureHandler((err) => showToast(err.message, false))
             .recordMultiItemSale(payload, token);
