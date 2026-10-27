@@ -871,6 +871,32 @@ function previewAndMatchBulkStock(rawText) {
   };
 }
 
+function updateLocationTarget(locationId, monthlyTarget, sessionToken) {
+  const currentUser = validateSessionToken(sessionToken);
+  if (!currentUser) throw new Error('Your session has expired. Please log in with your PIN again.');
+  if (!currentUser.isAdmin) throw new Error('Only admins can update location targets.');
+
+  const target = Number(monthlyTarget);
+  if (!Number.isInteger(target) || target < 1) {
+    throw new Error('Monthly target must be a positive whole number.');
+  }
+
+  ensureSheetsExist();
+  const sheet = getSheetByName(SHEET_NAMES.locations);
+  const values = sheet.getDataRange().getValues();
+  const headers = values[0].map((header) => String(header || '').trim().toLowerCase());
+  const idIdx = headers.indexOf('locationid');
+  const targetIdx = headers.indexOf('monthlytarget');
+  if (idIdx === -1 || targetIdx === -1) throw new Error('Location target columns were not found.');
+
+  const normalizedId = String(locationId || '').trim();
+  const rowIdx = values.findIndex((row, index) => index > 0 && String(row[idIdx] || '').trim() === normalizedId);
+  if (rowIdx === -1) throw new Error('Location not found.');
+
+  sheet.getRange(rowIdx + 1, targetIdx + 1).setValue(target);
+  return { success: true, message: `Monthly target updated to ${target} books.` };
+}
+
 function addNewLocation(locationName, monthlyTarget) {
   ensureSheetsExist();
   const locName = String(locationName || '').trim();

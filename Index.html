@@ -323,6 +323,30 @@
         padding: 14px;
         margin-bottom: 12px;
       }
+      .target-edit-controls {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin-top: 12px;
+      }
+      .target-edit-controls input {
+        width: 120px;
+        height: 36px;
+        border: 1px solid var(--line);
+        border-radius: 6px;
+        padding: 0 8px;
+      }
+      .target-save-btn {
+        height: 36px;
+        padding: 0 12px;
+        border: 1px solid var(--line);
+        border-radius: 6px;
+        background: #fff;
+        color: var(--text);
+        font-weight: 600;
+        cursor: pointer;
+      }
+      .target-save-btn:disabled { opacity: 0.6; cursor: wait; }
       .target-header {
         display: flex;
         justify-content: space-between;
@@ -1443,6 +1467,7 @@ ${bookListStr}`;
         targets.forEach((t) => {
           const card = document.createElement('div');
           card.className = 'target-card';
+          card.dataset.locationId = t.locationId || '';
           card.innerHTML = `
             <div class="target-header">
               <span>📍 ${t.locationName}</span>
@@ -1453,6 +1478,23 @@ ${bookListStr}`;
             </div>
             <div style="font-size: 12px; color: var(--muted); margin-top: 6px;">Total Revenue: ₹${t.revenue.toLocaleString('en-IN')}</div>
           `;
+          if (appData.currentUser && appData.currentUser.isAdmin && t.locationId && t.locationId !== 'LOC-CUSTOM') {
+            const controls = document.createElement('div');
+            controls.className = 'target-edit-controls';
+            const input = document.createElement('input');
+            input.className = 'target-input';
+            input.type = 'number';
+            input.min = '1';
+            input.step = '1';
+            input.value = t.target;
+            input.setAttribute('aria-label', `Monthly book target for ${t.locationName}`);
+            const button = document.createElement('button');
+            button.className = 'target-save-btn';
+            button.type = 'button';
+            button.textContent = 'Save Target';
+            controls.append(input, button);
+            card.appendChild(controls);
+          }
           container.appendChild(card);
         });
       }
@@ -1846,6 +1888,33 @@ ${bookListStr}`;
         document.getElementById('histMonthFilter').addEventListener('change', loadHistory);
         document.getElementById('histSearchInput').addEventListener('input', renderHistoryTable);
         document.getElementById('targetMonthPicker').addEventListener('change', loadTargets);
+        document.getElementById('locationTargetsContainer').addEventListener('click', (event) => {
+          const button = event.target.closest('.target-save-btn');
+          if (!button) return;
+
+          const card = button.closest('.target-card');
+          const targetInput = card.querySelector('.target-input');
+          const target = Number(targetInput.value);
+          if (!Number.isInteger(target) || target < 1) {
+            showToast('Monthly target must be a positive whole number.', false);
+            return;
+          }
+
+          button.disabled = true;
+          button.textContent = 'Saving...';
+          google.script.run
+            .withSuccessHandler((res) => {
+              showToast(res.message);
+              invalidateCachedData('targets:');
+              loadTargets();
+            })
+            .withFailureHandler((err) => {
+              button.disabled = false;
+              button.textContent = 'Save Target';
+              showToast(err.message, false);
+            })
+            .updateLocationTarget(card.dataset.locationId, target, localStorage.getItem(SESSION_STORAGE_KEY));
+        });
         document.getElementById('invOwnerFilter').addEventListener('change', loadInventory);
         document.getElementById('invStatusFilter').addEventListener('change', loadInventory);
         document.getElementById('invBookTitleFilter').addEventListener('input', renderInventoryTable);
