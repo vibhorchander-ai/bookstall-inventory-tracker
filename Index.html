@@ -1277,7 +1277,7 @@
           bookListStr = '1. (No books logged for this date/location yet)';
         }
 
-        const fullLoc = subLoc ? `${loc} (${subLoc})` : loc;
+        const fullLoc = subLoc ? `${subLoc}, ${loc}` : loc;
 
         const summaryText = 
 `Bookstall Interaction Summary:
@@ -1287,7 +1287,7 @@
 📚Books Reached: ${totalBooks}
 🗣️Interactions: ~${interactions}
 ⏳Duration: ${durationDisplay} hours
-📲AP mirror installation: ~${appInstalls}
+📲AP mirror installation: ${appInstalls}
 
 Books reached :
 ${bookListStr}`;
