@@ -1,0 +1,2014 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+    <title>Book Stall Operations</title>
+    <style>
+      :root {
+        --page-bg: #edf2f9;
+        --sidebar-bg: #f8fafc;
+        --card: #ffffff;
+        --primary: #4f5ce8;
+        --primary-dark: #3742be;
+        --text: #1e293b;
+        --muted: #64748b;
+        --line: #e2e8f0;
+        --green: #10b981;
+        --red: #ef4444;
+        --orange: #f59e0b;
+        --shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -2px rgba(0, 0, 0, 0.05);
+      }
+
+      * {
+        box-sizing: border-box;
+        -webkit-tap-highlight-color: transparent;
+      }
+
+      body {
+        margin: 0;
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+        background: var(--page-bg);
+        color: var(--text);
+      }
+
+      .app-shell { display: flex; min-height: 100vh; }
+
+      /* SIDEBAR */
+      .sidebar {
+        width: 260px;
+        background: var(--sidebar-bg);
+        border-right: 1px solid var(--line);
+        padding: 20px 14px;
+        display: flex;
+        flex-direction: column;
+      }
+      .brand { display: flex; align-items: center; gap: 10px; margin-bottom: 20px; }
+      .brand-mark { font-size: 24px; background: #fff; padding: 6px 10px; border-radius: 10px; box-shadow: var(--shadow); }
+      .brand-text .top { font-weight: 800; font-size: 16px; display: block; }
+      .brand-text .sub { font-size: 12px; color: var(--muted); font-weight: 600; }
+
+      .user-badge {
+        background: #eef2ff;
+        border: 1px solid #c7d2fe;
+        border-radius: 10px;
+        padding: 10px 12px;
+        margin-bottom: 16px;
+        font-size: 13px;
+      }
+      .user-badge .role-tag {
+        display: inline-block;
+        background: var(--primary);
+        color: #fff;
+        padding: 2px 8px;
+        border-radius: 20px;
+        font-size: 10px;
+        font-weight: 700;
+        text-transform: uppercase;
+        margin-top: 3px;
+      }
+
+      .btn-logout {
+        background: transparent;
+        border: 1px solid #cbd5e1;
+        border-radius: 6px;
+        padding: 2px 8px;
+        font-size: 11px;
+        font-weight: 700;
+        color: var(--muted);
+        cursor: pointer;
+        float: right;
+      }
+      .btn-logout:hover { color: var(--red); border-color: var(--red); }
+
+      .nav { display: flex; flex-direction: column; gap: 6px; flex: 1; }
+      .nav-btn {
+        background: transparent;
+        border: none;
+        border-radius: 10px;
+        padding: 11px 12px;
+        font-size: 14px;
+        font-weight: 600;
+        color: var(--muted);
+        text-align: left;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        cursor: pointer;
+        transition: all 0.15s ease;
+      }
+      .nav-btn:hover { background: #f1f5f9; color: var(--text); }
+      .nav-btn.active {
+        background: var(--primary);
+        color: #fff;
+        box-shadow: 0 4px 10px rgba(79, 92, 232, 0.25);
+      }
+      .admin-only { display: none; }
+
+      /* MAIN VIEWPORT */
+      .main { flex: 1; padding: 22px 24px; overflow-y: auto; }
+      .page-section { display: none; }
+      .page-section.active { display: block; }
+
+      .panel {
+        background: var(--card);
+        border: 1px solid var(--line);
+        border-radius: 14px;
+        box-shadow: var(--shadow);
+        padding: 22px;
+        margin-bottom: 20px;
+      }
+
+      .section-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        margin-bottom: 18px;
+        flex-wrap: wrap;
+        gap: 10px;
+      }
+      .section-header h1 { margin: 0; font-size: 21px; font-weight: 800; }
+      .section-header p { margin: 4px 0 0; color: var(--muted); font-size: 13px; }
+
+      .grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
+      .grid-2 { display: grid; grid-template-columns: repeat(2, 1fr); gap: 14px; }
+
+      .field { display: flex; flex-direction: column; margin-bottom: 14px; }
+      .field label { font-size: 12px; font-weight: 700; margin-bottom: 5px; color: var(--text); }
+      .field input, .field select, .field textarea {
+        height: 44px;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        padding: 0 12px;
+        font-size: 14px;
+        outline: none;
+        background: #fff;
+      }
+      .summary-volunteer-picker { position: relative; }
+      .summary-volunteer-trigger {
+        width: 100%;
+        min-height: 44px;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        padding: 10px 12px;
+        background: #fff;
+        color: var(--text);
+        font: inherit;
+        text-align: left;
+        cursor: pointer;
+      }
+      .summary-volunteer-dropdown {
+        position: absolute;
+        top: calc(100% + 4px);
+        left: 0;
+        right: 0;
+        z-index: 20;
+        max-height: 220px;
+        overflow-y: auto;
+        padding: 6px;
+        background: #fff;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        box-shadow: var(--shadow);
+      }
+      .summary-volunteer-dropdown[hidden] { display: none; }
+      .summary-volunteer-option {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 8px;
+        border-radius: 5px;
+        cursor: pointer;
+      }
+      .summary-volunteer-option:hover { background: #f1f5f9; }
+      .summary-volunteer-option input { margin: 0; }
+      .field textarea { height: auto; min-height: 70px; padding: 10px; }
+
+      /* TAB SWITCHER */
+      .tab-bar {
+        display: flex;
+        gap: 8px;
+        margin-bottom: 16px;
+        border-bottom: 1px solid var(--line);
+        padding-bottom: 8px;
+      }
+      .tab-btn {
+        background: transparent;
+        border: none;
+        border-radius: 6px;
+        padding: 8px 14px;
+        font-weight: 700;
+        font-size: 13px;
+        color: var(--muted);
+        cursor: pointer;
+      }
+      .tab-btn.active {
+        background: #eef2ff;
+        color: var(--primary);
+      }
+
+      /* CART ROW */
+      .items-container {
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        padding: 14px;
+        background: #f8fafc;
+        margin-bottom: 18px;
+      }
+      .item-row {
+        display: grid;
+        grid-template-columns: 3.5fr 1fr 1.2fr 1fr 34px;
+        gap: 10px;
+        align-items: center;
+        background: #fff;
+        padding: 10px;
+        border-radius: 8px;
+        border: 1px solid var(--line);
+        margin-bottom: 8px;
+        position: relative;
+      }
+      .item-row input {
+        height: 40px;
+        border: 1px solid var(--line);
+        border-radius: 6px;
+        padding: 0 8px;
+        font-size: 14px;
+      }
+      .btn-del {
+        background: transparent;
+        border: none;
+        color: var(--red);
+        font-size: 22px;
+        cursor: pointer;
+        text-align: center;
+      }
+
+      .typeahead-wrap { position: relative; width: 100%; }
+      .typeahead-input { width: 100%; cursor: pointer; }
+      .typeahead-dropdown {
+        position: absolute;
+        top: 100%;
+        left: 0;
+        right: 0;
+        max-height: 220px;
+        overflow-y: auto;
+        background: #ffffff;
+        border: 1px solid var(--primary);
+        border-radius: 8px;
+        box-shadow: 0 10px 20px rgba(0, 0, 0, 0.15);
+        z-index: 9999;
+        display: none;
+        margin-top: 4px;
+      }
+      .typeahead-item {
+        padding: 10px 12px;
+        font-size: 13px;
+        cursor: pointer;
+        border-bottom: 1px solid var(--line);
+        color: var(--text);
+      }
+      .typeahead-item:hover { background: #eef2ff; color: var(--primary-dark); font-weight: 600; }
+      .typeahead-item:last-child { border-bottom: none; }
+
+      .btn-add-item {
+        background: #eef2ff;
+        color: var(--primary);
+        border: 1px dashed var(--primary);
+        border-radius: 8px;
+        height: 42px;
+        font-weight: 700;
+        font-size: 14px;
+        cursor: pointer;
+        width: 100%;
+      }
+
+      .cart-footer {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-top: 14px;
+        padding-top: 12px;
+        border-top: 1px solid var(--line);
+        font-size: 14px;
+      }
+      .grand-total { font-size: 17px; font-weight: 800; color: var(--primary-dark); }
+
+      .btn-primary {
+        background: var(--primary);
+        color: #fff;
+        border: none;
+        border-radius: 8px;
+        padding: 0 20px;
+        height: 44px;
+        font-weight: 700;
+        font-size: 14px;
+        cursor: pointer;
+      }
+
+      .summary-box {
+        background: #f8fafc;
+        border: 1px solid #cbd5e1;
+        border-radius: 10px;
+        padding: 14px;
+        font-family: monospace;
+        font-size: 13px;
+        white-space: pre-wrap;
+        margin-top: 12px;
+      }
+
+      .target-card {
+        background: #fff;
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        padding: 14px;
+        margin-bottom: 12px;
+      }
+      .target-edit-controls {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin-top: 12px;
+      }
+      .target-edit-controls input {
+        width: 120px;
+        height: 36px;
+        border: 1px solid var(--line);
+        border-radius: 6px;
+        padding: 0 8px;
+      }
+      .target-save-btn {
+        height: 36px;
+        padding: 0 12px;
+        border: 1px solid var(--line);
+        border-radius: 6px;
+        background: #fff;
+        color: var(--text);
+        font-weight: 600;
+        cursor: pointer;
+      }
+      .target-save-btn:disabled { opacity: 0.6; cursor: wait; }
+      .target-header {
+        display: flex;
+        justify-content: space-between;
+        font-weight: 700;
+        margin-bottom: 6px;
+      }
+      .progress-bar-bg {
+        height: 10px;
+        background: #e2e8f0;
+        border-radius: 5px;
+        overflow: hidden;
+      }
+      .progress-bar-fill {
+        height: 100%;
+        background: var(--primary);
+        transition: width 0.3s ease;
+      }
+
+      /* RESPONSIVE TABLE WRAPPER */
+      .table-responsive {
+        width: 100%;
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+        margin-top: 12px;
+        border-radius: 8px;
+        border: 1px solid var(--line);
+      }
+
+      table {
+        width: 100%;
+        min-width: 600px;
+        border-collapse: collapse;
+        font-size: 13px;
+      }
+      th, td { padding: 10px 12px; text-align: left; border-bottom: 1px solid var(--line); }
+      th { font-size: 11px; text-transform: uppercase; color: var(--muted); background: #f8fafc; }
+
+      .badge { padding: 3px 6px; border-radius: 4px; font-size: 11px; font-weight: 700; }
+      .badge-green { background: #dcfce7; color: #15803d; }
+      .badge-red { background: #fee2e2; color: #b91c1c; }
+      .badge-orange { background: #fef3c7; color: #b45309; }
+      .badge-blue { background: #e0e7ff; color: #3730a3; }
+
+      /* LOGIN MODAL OVERLAY */
+      .login-modal-overlay {
+        position: fixed;
+        top: 0; left: 0; right: 0; bottom: 0;
+        background: rgba(15, 23, 42, 0.7);
+        backdrop-filter: blur(4px);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 100000;
+        padding: 20px;
+      }
+      .login-card {
+        background: #fff;
+        border-radius: 16px;
+        padding: 30px;
+        max-width: 420px;
+        width: 100%;
+        box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.2);
+        text-align: center;
+      }
+      .login-card h2 { margin: 0 0 6px; font-size: 22px; font-weight: 800; }
+      .login-card p { color: var(--muted); font-size: 13px; margin: 0 0 20px; }
+
+      @media (max-width: 850px) {
+        .app-shell { flex-direction: column; }
+        .sidebar { width: 100%; border-right: none; border-bottom: 1px solid var(--line); }
+        .nav { flex-direction: row; overflow-x: auto; padding-bottom: 4px; }
+        .nav-btn { white-space: nowrap; padding: 8px 12px; font-size: 13px; }
+        .main { padding: 14px; }
+        .panel { padding: 16px; }
+        .grid-3, .grid-2 { grid-template-columns: 1fr; }
+        .item-row { grid-template-columns: 1fr; gap: 6px; }
+      }
+    </style>
+  </head>
+
+  <body>
+    <!-- Suggestion datalist populated per Major Location -->
+    <datalist id="subLocationsSuggestions"></datalist>
+
+    <!-- PIN LOGIN MODAL -->
+    <div id="loginModal" class="login-modal-overlay" style="display: none;">
+      <div class="login-card">
+        <div style="font-size: 40px; margin-bottom: 12px;">📚</div>
+        <h2>Volunteer Verification</h2>
+        <p>Select your profile and enter your 4-digit PIN to access stall operations.</p>
+
+        <div class="field" style="text-align: left;">
+          <label>Select Your Name *</label>
+          <select id="loginVolunteerSelect" style="width: 100%;">
+            <option value="">-- Choose Name --</option>
+          </select>
+        </div>
+
+        <div class="field" style="text-align: left;">
+          <label>4-Digit PIN *</label>
+          <input id="loginPinInput" type="password" maxlength="6" placeholder="Enter PIN..." style="width: 100%; font-size: 18px; letter-spacing: 4px; text-align: center;" />
+        </div>
+
+        <button class="btn-primary" id="btnSubmitLogin" type="button" style="width: 100%; margin-top: 10px;">
+          Unlock Stall App
+        </button>
+      </div>
+    </div>
+
+    <!-- MAIN APP SHELL -->
+    <div class="app-shell">
+      <aside class="sidebar">
+        <div class="brand">
+          <div class="brand-mark">📚</div>
+          <div class="brand-text">
+            <span class="top">Classroom Conversations</span>
+            <span class="sub">Book Stall Operations</span>
+          </div>
+        </div>
+
+        <div class="user-badge">
+          <button type="button" class="btn-logout" id="btnLogout" title="Log out on this device">Exit</button>
+          <div style="font-weight: 700; font-size: 14px;" id="lblUserName">—</div>
+          <div style="font-size: 11px; color: var(--muted); word-break: break-all;" id="lblUserEmail">—</div>
+          <div id="lblUserRole" class="role-tag">Volunteer</div>
+        </div>
+
+        <nav class="nav">
+          <button class="nav-btn active" data-page="page-record"><span>📒</span> Record Sales</button>
+          <button class="nav-btn" data-page="page-summary"><span>🗣️</span> Post-Stall Summary</button>
+          <button class="nav-btn" data-page="page-prices"><span>🏷️</span> Price Insights</button>
+          <button class="nav-btn" data-page="page-targets"><span>🎯</span> Location Targets</button>
+          <button class="nav-btn" data-page="page-history"><span>🕒</span> History & Audit</button>
+          <button class="nav-btn" data-page="page-stock"><span>📦</span> Add Stock</button>
+          <button class="nav-btn" data-page="page-inventory"><span>📊</span> Inventory</button>
+          <button class="nav-btn admin-only" data-page="page-users"><span>👥</span> Volunteers</button>
+        </nav>
+      </aside>
+
+      <main class="main">
+        <!-- 1. RECORD SALES -->
+        <section id="page-record" class="page-section active">
+          <div class="panel">
+            <div class="section-header">
+              <div>
+                <h1>Record Transactions</h1>
+                <p>One stall event links multiple sales. Type to search titles with custom prices.</p>
+              </div>
+            </div>
+
+            <div class="grid-3">
+              <div class="field">
+                <label>Major Location *</label>
+                <div style="display: flex; gap: 6px;">
+                  <select id="saleLocation" style="flex: 1;"></select>
+                  <button type="button" id="btnQuickAddLoc" title="Add New Location" style="border: 1px solid var(--line); border-radius: 8px; background: #fff; padding: 0 10px; cursor: pointer;">➕</button>
+                </div>
+              </div>
+              <div class="field">
+                <label>Sub-Location / Landmark *</label>
+                <input id="saleSubLocation" list="subLocationsSuggestions" type="text" placeholder="Pick suggestion or type new landmark..." autocomplete="off" />
+              </div>
+              <div class="field">
+                <label>Event Date *</label>
+                <input id="saleDate" type="date" />
+              </div>
+            </div>
+
+            <div class="grid-2">
+              <div class="field">
+                <label>Sold By (Volunteer) *</label>
+                <select id="saleVolunteer"></select>
+              </div>
+              <div class="field">
+                <label>Stock Owner (Optional attribution)</label>
+                <select id="saleStockOwner"></select>
+              </div>
+            </div>
+
+            <div class="items-container">
+              <div style="display: flex; justify-content: space-between; margin-bottom: 10px;">
+                <strong style="font-size: 14px;">Sale Items</strong>
+                <span id="booksLoadedNotice" style="font-size: 12px; color: var(--muted);">Loading titles...</span>
+              </div>
+
+              <div id="saleItemsList"></div>
+
+              <button class="btn-add-item" id="btnAddSaleItem" type="button">➕ Add More Books</button>
+
+              <div class="cart-footer">
+                <div>Total Books Reached: <strong id="lblTotalItemsCount">0</strong></div>
+                <div class="grand-total">Total Amount: ₹<span id="lblGrandTotal">0</span></div>
+              </div>
+            </div>
+
+            <div class="field">
+              <label>Notes (Optional)</label>
+              <textarea id="saleNotes" rows="1" placeholder="Buyer notes, contact, etc..."></textarea>
+            </div>
+
+            <div style="display: flex; justify-content: flex-end;">
+              <button class="btn-primary" id="btnSubmitSale" type="button">💾 Save Sale Transaction</button>
+            </div>
+          </div>
+        </section>
+
+        <!-- 2. SUMMARY GENERATOR -->
+        <section id="page-summary" class="page-section">
+          <div class="panel" style="max-width: 680px;">
+            <div class="section-header">
+              <div>
+                <h1>Stall Interaction Summary</h1>
+                <p>Generates WhatsApp message and updates the exact stall session in Events.</p>
+              </div>
+            </div>
+
+            <div class="grid-2">
+              <div class="field">
+                <label>Major Location *</label>
+                <select id="sumLocation"></select>
+              </div>
+              <div class="field">
+                <label>Sub-Location / Landmark *</label>
+                <input id="sumSubLoc" list="subLocationsSuggestions" type="text" placeholder="Pick suggestion or type landmark..." autocomplete="off" />
+              </div>
+            </div>
+
+            <div class="grid-2">
+              <div class="field">
+                <label>Volunteers*</label>
+                <div class="summary-volunteer-picker" id="sumVolunteerPicker">
+                  <button id="sumVolunteers" class="summary-volunteer-trigger" type="button" aria-haspopup="listbox" aria-expanded="false">Select volunteers</button>
+                  <div id="sumVolunteerDropdown" class="summary-volunteer-dropdown" role="listbox" aria-label="Volunteers" aria-multiselectable="true" hidden></div>
+                </div>
+                <input id="sumAdditionalVolunteers" type="text" placeholder="Add unlisted name(s), separated by commas" />
+              </div>
+              <div class="field">
+                <label>Date *</label>
+                <input id="sumDate" type="date" />
+              </div>
+            </div>
+
+            <div class="grid-3">
+              <div class="field">
+                <label>Interactions Count</label>
+                <input id="sumInteractions" type="text" placeholder="~15" />
+              </div>
+              <div class="field">
+                <label>Duration</label>
+                <input id="sumDuration" type="number" min="0" step="any" placeholder="e.g. 1.5" />
+              </div>
+              <div class="field">
+                <label>AP Mirror App Installs</label>
+                <input id="sumAppInstalls" type="number" min="0" value="0" />
+              </div>
+            </div>
+
+            <button class="btn-primary" id="btnGenerateSummary" type="button" style="width: 100%;">📋 Generate & Save Event Summary</button>
+
+            <div id="summaryOutputWrapper" style="display: none; margin-top: 16px;">
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                <strong>Generated Message:</strong>
+                <button type="button" id="btnCopySummary" style="border: 1px solid var(--line); border-radius: 6px; background: #fff; padding: 4px 10px; cursor: pointer; font-size: 12px; font-weight: 700;">Copy to Clipboard</button>
+              </div>
+              <div id="summaryTextOutput" class="summary-box"></div>
+            </div>
+          </div>
+        </section>
+
+        <!-- 3. PRICE INSIGHTS TAB -->
+        <section id="page-prices" class="page-section">
+          <div class="panel">
+            <div class="section-header">
+              <div>
+                <h1>Location-Wise Typical Selling Prices</h1>
+                <p>Lookup average and historical selling price ranges per location to guide stall pricing.</p>
+              </div>
+            </div>
+
+            <div style="display: flex; gap: 10px; margin-bottom: 14px; flex-wrap: wrap;">
+              <select id="priceFilterLocation" style="height: 40px; border-radius: 8px; border: 1px solid var(--line); padding: 0 10px; min-width: 180px;">
+                <option value="">All Locations</option>
+              </select>
+
+              <input id="priceFilterBook" type="text" placeholder="Filter by book title (e.g. Gita, Upanishads)..." style="height: 40px; border-radius: 8px; border: 1px solid var(--line); padding: 0 10px; flex: 1; min-width: 220px;" />
+
+              <button type="button" id="btnClearPriceFilters" style="height: 40px; padding: 0 14px; border: 1px solid var(--line); border-radius: 8px; background: #fff; cursor: pointer; font-size: 13px; font-weight: 600;">
+                Reset Filters
+              </button>
+            </div>
+
+            <div class="table-responsive">
+              <table id="priceInsightsTable">
+                <thead>
+                  <tr>
+                    <th style="min-width: 140px;">Location</th>
+                    <th style="min-width: 220px;">Book Title</th>
+                    <th style="min-width: 140px;">Average Selling Price</th>
+                    <th style="min-width: 130px;">Price Range</th>
+                  </tr>
+                </thead>
+                <tbody></tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        <!-- 4. LOCATION TARGETS -->
+        <section id="page-targets" class="page-section">
+          <div class="panel">
+            <div class="section-header">
+              <div>
+                <h1>Monthly Sales Targets</h1>
+                <p>Track copies sold and revenue progress toward monthly goals across each major location.</p>
+              </div>
+              <input id="targetMonthPicker" type="month" style="height: 38px; border-radius: 6px; border: 1px solid var(--line); padding: 0 8px;" />
+            </div>
+
+            <div id="locationTargetsContainer"></div>
+          </div>
+        </section>
+
+        <!-- 5. HISTORY & AUDIT -->
+        <section id="page-history" class="page-section">
+          <div class="panel">
+            <div class="section-header">
+              <div>
+                <h1>Transactions & Audit Trail</h1>
+                <p>Log of all recorded sales transactions.</p>
+              </div>
+            </div>
+
+            <div style="display: flex; gap: 10px; margin-bottom: 14px; flex-wrap: wrap;">
+              <select id="histLocationFilter" style="height: 40px; border-radius: 8px; border: 1px solid var(--line); padding: 0 10px;">
+                <option value="">All Locations</option>
+              </select>
+              <select id="histRecordedByFilter" style="height: 40px; border-radius: 8px; border: 1px solid var(--line); padding: 0 10px;">
+                <option value="">All Recorders</option>
+              </select>
+              <input id="histMonthFilter" type="month" style="height: 40px; border-radius: 8px; border: 1px solid var(--line); padding: 0 10px;" />
+              <input id="histSearchInput" type="text" placeholder="Search book, sublocation, notes..." style="height: 40px; border-radius: 8px; border: 1px solid var(--line); padding: 0 10px; flex: 1; min-width: 180px;" />
+            </div>
+
+            <div class="table-responsive">
+              <table id="historyTable">
+                <thead>
+                  <tr>
+                    <th>#</th>
+                    <th>Date</th>
+                    <th>Book Title</th>
+                    <th>Qty</th>
+                    <th>Total</th>
+                    <th>Location</th>
+                    <th>Seller</th>
+                    <th>Recorded By</th>
+                    <th>Notes</th>
+                  </tr>
+                </thead>
+                <tbody></tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        <!-- 6. ADD STOCK (SINGLE TITLE & BULK WITH DISCREPANCY RESOLVER) -->
+        <section id="page-stock" class="page-section">
+          <div class="panel" style="max-width: 760px;">
+            <div class="section-header">
+              <div>
+                <h1>Allocate Stock (Secondary)</h1>
+                <p>Assign books to volunteer inventory via single title entry or bulk paste with discrepancy matching.</p>
+              </div>
+            </div>
+
+            <div class="tab-bar">
+              <button type="button" class="tab-btn active" id="tabBtnSingleStock">Single Title Entry</button>
+              <button type="button" class="tab-btn" id="tabBtnBulkStock">Bulk Stock Paste</button>
+            </div>
+
+            <div class="field">
+              <label>Assign to Volunteer *</label>
+              <select id="addStockOwner"></select>
+            </div>
+
+            <!-- MODE 1: Single Title Entry -->
+            <div id="secSingleStock">
+              <div class="field">
+                <label>Book Title *</label>
+                <div class="typeahead-wrap">
+                  <input type="text" id="singleStockBookInput" class="typeahead-input" placeholder="Tap to select book title..." autocomplete="off" />
+                  <div class="typeahead-dropdown" id="singleStockDropdown"></div>
+                </div>
+              </div>
+              <div class="field">
+                <label>Quantity Received *</label>
+                <input id="singleStockQty" type="number" min="1" value="10" />
+              </div>
+              <button class="btn-primary" id="btnSubmitSingleStock" type="button" style="width: 100%;">📦 Add Single Title to Stock</button>
+            </div>
+
+            <!-- MODE 2: Bulk Paste with Discrepancy Matching -->
+            <div id="secBulkStock" style="display: none;">
+              <div class="field">
+                <label>Paste Books & Quantities (from Sheets / Excel)</label>
+                <p style="font-size: 12px; color: var(--muted); margin: 0 0 6px;">Format: <code>Book Title, Quantity</code> (e.g. BG V1, 10 or Upanishads, 20)</p>
+                <textarea id="bulkStockPasteInput" rows="5" placeholder="BG V1, 10&#10;Womens Revolution, 5&#10;Upanishads, 20"></textarea>
+              </div>
+
+              <button class="btn-primary" id="btnPreviewBulkStock" type="button" style="width: 100%; margin-bottom: 14px;">🔍 Preview & Match Titles</button>
+
+              <div id="bulkReviewWrapper" style="display: none; background: #f8fafc; border: 1px solid var(--line); border-radius: 10px; padding: 14px;">
+                <h4 style="margin: 0 0 8px;">Review Discrepancies Before Adding:</h4>
+                <p style="font-size: 12px; color: var(--muted); margin: 0 0 10px;">Verify matched standard titles. For any discrepancies, pick the intended catalogue book.</p>
+                <div class="table-responsive">
+                  <table id="bulkReviewTable" style="min-width: 550px;">
+                    <thead>
+                      <tr>
+                        <th>Pasted Input</th>
+                        <th>Matched Standard Catalogue Title</th>
+                        <th style="width: 70px;">Qty</th>
+                        <th>Status</th>
+                      </tr>
+                    </thead>
+                    <tbody></tbody>
+                  </table>
+                </div>
+                <button class="btn-primary" id="btnConfirmBulkStock" type="button" style="width: 100%; margin-top: 14px;">✅ Confirm & Commit Stock</button>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- 7. INVENTORY -->
+        <section id="page-inventory" class="page-section">
+          <div class="panel">
+            <div class="section-header">
+              <div>
+                <h1>Inventory Levels</h1>
+                <p>Current physical stock assigned to volunteers.</p>
+              </div>
+            </div>
+
+            <div style="display: flex; gap: 10px; margin-bottom: 14px; flex-wrap: wrap;">
+              <select id="invOwnerFilter" style="height: 40px; border-radius: 8px; border: 1px solid var(--line); padding: 0 10px;">
+                <option value="">All Volunteers</option>
+              </select>
+              <select id="invStatusFilter" style="height: 40px; border-radius: 8px; border: 1px solid var(--line); padding: 0 10px;">
+                <option value="all">All Items</option>
+                <option value="available" selected>In Stock (> 0)</option>
+                <option value="out_of_stock">Out of Stock (= 0)</option>
+              </select>
+              <input id="invBookTitleFilter" type="search" aria-label="Filter inventory by book title" placeholder="Filter by book title" style="height: 40px; min-width: 220px; border: 1px solid var(--line); border-radius: 8px; padding: 0 10px;" />
+            </div>
+
+            <div class="table-responsive">
+              <table id="invTable">
+                <thead>
+                  <tr>
+                    <th>#</th>
+                    <th>Volunteer</th>
+                    <th>Book Title</th>
+                    <th>Available</th>
+                    <th>Status</th>
+                  </tr>
+                </thead>
+                <tbody></tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        <!-- 8. VOLUNTEERS (ADMIN ONLY) -->
+        <section id="page-users" class="page-section">
+          <div class="panel" style="margin-bottom: 24px;">
+            <div class="section-header">
+              <div>
+                <h1>Add New Volunteer</h1>
+                <p>Register a new volunteer with their assigned PIN to grant system access.</p>
+              </div>
+            </div>
+
+            <div class="grid-3">
+              <div class="field">
+                <label>Volunteer Name *</label>
+                <input id="newVolName" type="text" placeholder="e.g. Ramesh Kumar" />
+              </div>
+              <div class="field">
+                <label>Gmail Address *</label>
+                <input id="newVolEmail" type="email" placeholder="name@gmail.com" />
+              </div>
+              <div class="field">
+                <label>Access Role *</label>
+                <select id="newVolRole">
+                  <option value="user">User (Volunteer)</option>
+                  <option value="admin">Admin</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="grid-2">
+              <div class="field">
+                <label>Initial 4-Digit PIN *</label>
+                <input id="newVolPin" type="text" maxlength="6" value="1234" placeholder="e.g. 1008" />
+              </div>
+            </div>
+
+            <div style="display: flex; justify-content: flex-end;">
+              <button class="btn-primary" id="btnAddVolunteerSubmit" type="button">➕ Register Volunteer</button>
+            </div>
+          </div>
+
+          <div class="panel">
+            <div class="section-header">
+              <div>
+                <h1>Volunteer Permissions</h1>
+                <p>Manage volunteer roles, active status, and PINs.</p>
+              </div>
+            </div>
+
+            <div class="table-responsive">
+              <table id="volunteersTable" style="min-width: 650px;">
+                <thead>
+                  <tr>
+                    <th style="width: 80px;">ID</th>
+                    <th style="min-width: 140px;">Name</th>
+                    <th style="min-width: 180px;">Email</th>
+                    <th style="width: 140px;">Role</th>
+                    <th style="width: 100px;">PIN</th>
+                    <th style="width: 100px;">Status</th>
+                    <th style="width: 110px;">Actions</th>
+                  </tr>
+                </thead>
+                <tbody></tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <script>
+      let appData = {
+        currentUser: null,
+        books: [],
+        volunteers: [],
+        locations: [],
+        subLocationsMap: {},
+        historyRecords: []
+      };
+
+      let allPriceInsights = [];
+      let inventoryRows = [];
+      let allSalesRecords = null;
+      const DATA_CACHE_TTL_MS = 2 * 60 * 1000;
+      const dataCache = new Map();
+      const SESSION_STORAGE_KEY = 'cc_stall_user_session_token';
+
+      function getCachedData(key) {
+        const entry = dataCache.get(key);
+        if (!entry || Date.now() - entry.cachedAt >= DATA_CACHE_TTL_MS) {
+          dataCache.delete(key);
+          return null;
+        }
+        return entry.value;
+      }
+
+      function setCachedData(key, value) {
+        dataCache.set(key, { value: value, cachedAt: Date.now() });
+      }
+
+      function invalidateCachedData(prefix) {
+        Array.from(dataCache.keys()).forEach((key) => {
+          if (key.startsWith(prefix)) dataCache.delete(key);
+        });
+      }
+
+      function showToast(msg, isSuccess = true) {
+        const el = document.createElement('div');
+        el.style.cssText = `
+          position: fixed; bottom: 20px; right: 20px; z-index: 99999;
+          background: ${isSuccess ? '#10b981' : '#ef4444'}; color: #fff;
+          padding: 12px 18px; border-radius: 8px; font-weight: 700; font-size: 13px;
+          box-shadow: 0 10px 15px -3px rgba(0,0,0,0.1);
+        `;
+        el.textContent = msg;
+        document.body.appendChild(el);
+        setTimeout(() => el.remove(), 4000);
+      }
+
+      function showPage(pageId) {
+        document.querySelectorAll('.page-section').forEach((s) => s.classList.toggle('active', s.id === pageId));
+        document.querySelectorAll('.nav-btn').forEach((b) => b.classList.toggle('active', b.dataset.page === pageId));
+        if (pageId === 'page-history') loadHistory();
+        if (pageId === 'page-summary') loadSummarySales();
+        if (pageId === 'page-targets') loadTargets();
+        if (pageId === 'page-prices') loadPriceInsights();
+        if (pageId === 'page-inventory') loadInventory();
+      }
+
+      function init() {
+        const todayIso = new Date().toISOString().split('T')[0];
+        document.getElementById('saleDate').value = todayIso;
+        document.getElementById('sumDate').value = todayIso;
+        document.getElementById('targetMonthPicker').value = todayIso.substring(0, 7);
+
+        document.querySelectorAll('.nav-btn').forEach((btn) => {
+          btn.addEventListener('click', () => showPage(btn.dataset.page));
+        });
+
+        document.addEventListener('click', (e) => {
+          if (!e.target.closest('.typeahead-wrap')) {
+            document.querySelectorAll('.typeahead-dropdown').forEach((d) => (d.style.display = 'none'));
+          }
+          if (!e.target.closest('#sumVolunteerPicker')) {
+            setSummaryVolunteerDropdownOpen(false);
+          }
+        });
+
+        bindEventListeners();
+
+        const existingToken = localStorage.getItem(SESSION_STORAGE_KEY);
+        if (existingToken) {
+          loadAppDataWithToken(existingToken);
+        } else {
+          showLoginModal();
+        }
+      }
+
+      function showLoginModal() {
+        const modal = document.getElementById('loginModal');
+        modal.style.display = 'flex';
+
+        google.script.run
+          .withSuccessHandler((vols) => {
+            const sel = document.getElementById('loginVolunteerSelect');
+            sel.innerHTML = '<option value="">-- Choose Name --</option>';
+            vols.forEach((v) => {
+              const opt = document.createElement('option');
+              opt.value = v.volunteerId;
+              opt.textContent = v.name;
+              sel.appendChild(opt);
+            });
+          })
+          .getVolunteersForLogin();
+      }
+
+      function loadAppDataWithToken(token) {
+        google.script.run
+          .withSuccessHandler((res) => {
+            if (!res.currentUser) {
+              localStorage.removeItem(SESSION_STORAGE_KEY);
+              showLoginModal();
+              return;
+            }
+            document.getElementById('loginModal').style.display = 'none';
+            onLookupLoaded(res);
+          })
+          .withFailureHandler((err) => {
+            showToast('Failed to load: ' + err.message, false);
+            document.getElementById('booksLoadedNotice').textContent = '⚠️ Error loading titles';
+          })
+          .getLookupData(token);
+      }
+
+      function onLookupLoaded(res) {
+        appData = res;
+        const u = res.currentUser;
+
+        document.getElementById('lblUserName').textContent = u.name;
+        document.getElementById('lblUserEmail').textContent = u.email || '';
+        document.getElementById('lblUserRole').textContent = u.isAdmin ? 'Admin' : 'Volunteer';
+
+        if (u.isAdmin) {
+          document.querySelectorAll('.admin-only').forEach((el) => (el.style.display = 'flex'));
+        } else {
+          document.querySelectorAll('.admin-only').forEach((el) => (el.style.display = 'none'));
+        }
+
+        const notice = document.getElementById('booksLoadedNotice');
+        if (appData.books && appData.books.length > 0) {
+          notice.textContent = `✅ ${appData.books.length} titles ready`;
+          notice.style.color = '#10b981';
+        } else {
+          notice.textContent = '⚠️ 0 books found in sheet';
+          notice.style.color = '#ef4444';
+        }
+
+        populateDropdowns();
+        updateSubLocationSuggestions();
+
+        document.getElementById('saleItemsList').innerHTML = '';
+        addSaleItemRow();
+        renderVolunteersTable();
+        initSingleStockTypeahead();
+      }
+
+      function populateDropdowns() {
+        const locSelects = ['saleLocation', 'sumLocation', 'histLocationFilter'];
+        locSelects.forEach((id) => {
+          const el = document.getElementById(id);
+          if (!el) return;
+          const isFilter = id.includes('Filter');
+          el.innerHTML = isFilter ? '<option value="">All Locations</option>' : '';
+          appData.locations.forEach((loc) => {
+            const opt = document.createElement('option');
+            opt.value = loc.locationName;
+            opt.textContent = loc.locationName;
+            el.appendChild(opt);
+          });
+        });
+
+        const volSelects = ['saleVolunteer', 'saleStockOwner', 'addStockOwner', 'invOwnerFilter', 'histRecordedByFilter'];
+        volSelects.forEach((id) => {
+          const el = document.getElementById(id);
+          if (!el) return;
+          const isFilter = id.includes('Filter');
+          const isOptional = id === 'saleStockOwner';
+          el.innerHTML = isFilter ? '<option value="">All Volunteers</option>' : (isOptional ? '<option value="">None / Direct</option>' : '');
+
+          appData.volunteers.forEach((v) => {
+            const opt = document.createElement('option');
+            opt.value = v.name;
+            opt.textContent = v.name;
+            if (v.name === appData.currentUser.name && id === 'saleVolunteer') {
+              opt.selected = true;
+            }
+            el.appendChild(opt);
+          });
+        });
+
+        const volunteerDropdown = document.getElementById('sumVolunteerDropdown');
+        volunteerDropdown.innerHTML = '';
+        appData.volunteers.forEach((volunteer) => {
+          const label = document.createElement('label');
+          label.className = 'summary-volunteer-option';
+          const checkbox = document.createElement('input');
+          checkbox.type = 'checkbox';
+          checkbox.value = volunteer.name;
+          checkbox.checked = volunteer.name === appData.currentUser.name;
+          checkbox.addEventListener('change', updateSummaryVolunteerLabel);
+          const name = document.createElement('span');
+          name.textContent = volunteer.name;
+          label.append(checkbox, name);
+          volunteerDropdown.appendChild(label);
+        });
+        updateSummaryVolunteerLabel();
+      }
+
+      function setSummaryVolunteerDropdownOpen(isOpen) {
+        const button = document.getElementById('sumVolunteers');
+        const dropdown = document.getElementById('sumVolunteerDropdown');
+        dropdown.hidden = !isOpen;
+        button.setAttribute('aria-expanded', String(isOpen));
+      }
+
+      function updateSummaryVolunteerLabel() {
+        const selectedNames = Array.from(document.querySelectorAll('#sumVolunteerDropdown input:checked'))
+          .map((checkbox) => checkbox.value);
+        document.getElementById('sumVolunteers').textContent = selectedNames.join(', ') || 'Select volunteers';
+      }
+
+      function updateSubLocationSuggestions() {
+        const activeSection = document.querySelector('.page-section.active');
+        let loc = '';
+
+        if (activeSection && activeSection.id === 'page-summary') {
+          loc = document.getElementById('sumLocation').value;
+        } else {
+          loc = document.getElementById('saleLocation').value;
+        }
+
+        const datalist = document.getElementById('subLocationsSuggestions');
+        if (!datalist) return;
+        datalist.innerHTML = '';
+
+        const knownSubs = (appData.subLocationsMap && appData.subLocationsMap[loc]) || [];
+        knownSubs.forEach((subName) => {
+          const opt = document.createElement('option');
+          opt.value = subName;
+          datalist.appendChild(opt);
+        });
+      }
+
+      function addSaleItemRow() {
+        const list = document.getElementById('saleItemsList');
+        const row = document.createElement('div');
+        row.className = 'item-row';
+
+        row.innerHTML = `
+          <div class="typeahead-wrap">
+            <input type="text" class="inp-book-search typeahead-input" placeholder="Tap to select book..." autocomplete="off" />
+            <div class="typeahead-dropdown"></div>
+          </div>
+          <div>
+            <input type="number" class="inp-qty" min="1" value="1" placeholder="Qty" style="width: 100%;" />
+          </div>
+          <div>
+            <input type="number" class="inp-price" min="0" placeholder="₹ Price" style="width: 100%;" />
+          </div>
+          <div style="font-weight: 700; text-align: right; padding-top: 2px;">
+            ₹<span class="val-total">0</span>
+          </div>
+          <div>
+            <button type="button" class="btn-del" title="Remove row">×</button>
+          </div>
+        `;
+
+        list.appendChild(row);
+
+        const inpBook = row.querySelector('.inp-book-search');
+        const dropdown = row.querySelector('.typeahead-dropdown');
+        const inpQty = row.querySelector('.inp-qty');
+        const inpPrice = row.querySelector('.inp-price');
+        const btnDel = row.querySelector('.btn-del');
+
+        function renderDropdown(filterText = '') {
+          dropdown.innerHTML = '';
+          const q = filterText.toLowerCase().trim();
+          const matches = (appData.books || []).filter((b) => !q || b.bookName.toLowerCase().includes(q));
+
+          if (!matches.length) {
+            dropdown.innerHTML = '<div style="padding:10px; color:var(--muted); font-size:12px;">No matching books found</div>';
+            dropdown.style.display = 'block';
+            return;
+          }
+
+          matches.slice(0, 40).forEach((b) => {
+            const div = document.createElement('div');
+            div.className = 'typeahead-item';
+            div.textContent = b.bookName;
+            div.addEventListener('click', (e) => {
+              e.stopPropagation();
+              inpBook.value = b.bookName;
+              dropdown.style.display = 'none';
+              updateLine();
+            });
+            dropdown.appendChild(div);
+          });
+
+          dropdown.style.display = 'block';
+        }
+
+        inpBook.addEventListener('focus', () => {
+          document.querySelectorAll('.typeahead-dropdown').forEach((d) => (d.style.display = 'none'));
+          renderDropdown(inpBook.value);
+        });
+
+        inpBook.addEventListener('input', () => {
+          renderDropdown(inpBook.value);
+          updateLine();
+        });
+
+        const updateLine = () => {
+          const q = Number(inpQty.value || 0);
+          const p = Number(inpPrice.value || 0);
+          row.querySelector('.val-total').textContent = (q * p).toLocaleString('en-IN');
+          calcTotals();
+        };
+
+        inpQty.addEventListener('input', updateLine);
+        inpPrice.addEventListener('input', updateLine);
+
+        btnDel.addEventListener('click', () => {
+          if (list.children.length > 1) {
+            row.remove();
+            calcTotals();
+          } else {
+            showToast('A sale must have at least one book.', false);
+          }
+        });
+
+        calcTotals();
+      }
+
+      function calcTotals() {
+        let totalItems = 0;
+        let grandTotal = 0;
+
+        document.querySelectorAll('.item-row').forEach((row) => {
+          const q = Number(row.querySelector('.inp-qty').value || 0);
+          const p = Number(row.querySelector('.inp-price').value || 0);
+          totalItems += q;
+          grandTotal += (q * p);
+        });
+
+        document.getElementById('lblTotalItemsCount').textContent = totalItems;
+        document.getElementById('lblGrandTotal').textContent = grandTotal.toLocaleString('en-IN');
+      }
+
+      function initSingleStockTypeahead() {
+        const inp = document.getElementById('singleStockBookInput');
+        const dropdown = document.getElementById('singleStockDropdown');
+
+        function render(q = '') {
+          dropdown.innerHTML = '';
+          const matches = (appData.books || []).filter((b) => !q || b.bookName.toLowerCase().includes(q.toLowerCase().trim()));
+          if (!matches.length) {
+            dropdown.innerHTML = '<div style="padding:10px; color:var(--muted); font-size:12px;">No matching books found</div>';
+            dropdown.style.display = 'block';
+            return;
+          }
+          matches.slice(0, 40).forEach((b) => {
+            const div = document.createElement('div');
+            div.className = 'typeahead-item';
+            div.textContent = b.bookName;
+            div.addEventListener('click', (e) => {
+              e.stopPropagation();
+              inp.value = b.bookName;
+              dropdown.style.display = 'none';
+            });
+            dropdown.appendChild(div);
+          });
+          dropdown.style.display = 'block';
+        }
+
+        inp.addEventListener('focus', () => render(inp.value));
+        inp.addEventListener('input', () => render(inp.value));
+      }
+
+      function generateInteractionSummary() {
+        const loc = document.getElementById('sumLocation').value.trim();
+        const subLoc = document.getElementById('sumSubLoc').value.trim();
+        const selectedVolunteers = Array.from(document.querySelectorAll('#sumVolunteerDropdown input:checked'))
+          .map((checkbox) => checkbox.value);
+        const additionalVolunteers = document.getElementById('sumAdditionalVolunteers').value
+          .split(',').map((name) => name.trim()).filter(Boolean);
+        const volunteerNames = [...selectedVolunteers, ...additionalVolunteers]
+          .filter((name, index, names) => names.findIndex((candidate) => candidate.toLowerCase() === name.toLowerCase()) === index);
+        const volunteers = volunteerNames.join(', ');
+        const dateRaw = document.getElementById('sumDate').value.trim();
+        const interactions = document.getElementById('sumInteractions').value.trim() || '—';
+        const durationRaw = document.getElementById('sumDuration').value.trim();
+        const duration = durationRaw === '' ? '' : Number(durationRaw);
+        const durationDisplay = durationRaw === '' ? '—' : durationRaw;
+        const appInstalls = document.getElementById('sumAppInstalls').value.trim() || '0';
+
+        if (!loc) { showToast('Please select Major Location.', false); return; }
+        if (!subLoc) { showToast('Please enter Sub-Location / Landmark.', false); return; }
+        if (!volunteers) { showToast('Please enter Volunteers on Duty.', false); return; }
+        if (!dateRaw) { showToast('Please select Date.', false); return; }
+        if (duration !== '' && (!Number.isFinite(duration) || duration < 0)) {
+          showToast('Duration must be a non-negative number of hours.', false);
+          return;
+        }
+
+        let formattedDate = dateRaw;
+        if (dateRaw) {
+          const d = new Date(dateRaw);
+          formattedDate = d.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
+        }
+
+        if (getCachedData('sales:all') === null) {
+          loadSummarySales();
+          showToast('Loading sales data. Please try again shortly.', false);
+          return;
+        }
+
+        const matchedSales = (allSalesRecords || []).filter((s) => {
+          const sDate = s.date || (s.timestamp ? s.timestamp.substring(0, 10) : '');
+          const mDate = dateRaw ? sDate === dateRaw : true;
+          const mLoc = loc ? s.location.toLowerCase() === loc.toLowerCase() : true;
+          return mDate && mLoc;
+        });
+
+        const bookCounts = {};
+        let totalBooks = 0;
+
+        matchedSales.forEach((s) => {
+          const b = s.bookName;
+          const q = Number(s.quantity || 0);
+          bookCounts[b] = (bookCounts[b] || 0) + q;
+          totalBooks += q;
+        });
+
+        let bookListStr = '';
+        const entries = Object.entries(bookCounts);
+        if (entries.length > 0) {
+          bookListStr = entries.map(([title, qty], i) => `${i + 1}. ${title} - ${qty}`).join('\n');
+        } else {
+          bookListStr = '1. (No books logged for this date/location yet)';
+        }
+
+        const fullLoc = subLoc ? `${subLoc}, ${loc}` : loc;
+
+        const summaryText = 
+`Bookstall Interaction Summary:
+📍Location: ${fullLoc}
+👥Volunteer: ${volunteers}
+📅Date: ${formattedDate}
+📚Books Reached: ${totalBooks}
+🗣️Interactions: ~${interactions}
+⏳Duration: ${durationDisplay} hours
+📲AP mirror installation: ${appInstalls}
+
+Books reached :
+${bookListStr}`;
+
+        document.getElementById('summaryTextOutput').textContent = summaryText;
+        document.getElementById('summaryOutputWrapper').style.display = 'block';
+
+        showToast('Saving event summary...');
+        google.script.run
+          .withSuccessHandler((res) => {
+            showToast(res.message);
+            google.script.run.withSuccessHandler(onLookupLoaded).getLookupData(localStorage.getItem(SESSION_STORAGE_KEY));
+          })
+          .withFailureHandler((err) => showToast(err.message, false))
+          .saveEventSummary({
+            location: loc,
+            subLocation: subLoc,
+            date: dateRaw,
+            volunteers: volunteers,
+            interactions: interactions,
+            duration: duration,
+            appInstalls: appInstalls
+          });
+      }
+
+      function loadPriceInsights() {
+        const cachedInsights = getCachedData('priceInsights');
+        if (cachedInsights !== null) {
+          allPriceInsights = cachedInsights;
+          populatePriceLocationFilter();
+          renderFilteredPriceInsights();
+          return;
+        }
+
+        const tbody = document.querySelector('#priceInsightsTable tbody');
+        if (tbody) {
+          tbody.innerHTML = '<tr><td colspan="4" style="text-align:center; color:var(--muted); padding:16px;">Loading price data...</td></tr>';
+        }
+
+        google.script.run
+          .withSuccessHandler((data) => {
+            allPriceInsights = data.locationPriceInsights || [];
+            setCachedData('priceInsights', allPriceInsights);
+            populatePriceLocationFilter();
+            renderFilteredPriceInsights();
+          })
+          .withFailureHandler((err) => {
+            showToast('Error loading insights: ' + err.message, false);
+          })
+          .getLocationAnalyticsAndTargets('');
+      }
+
+      function populatePriceLocationFilter() {
+        const sel = document.getElementById('priceFilterLocation');
+        if (!sel) return;
+        const currentVal = sel.value;
+
+        const locs = Array.from(new Set(allPriceInsights.map((item) => item.location))).sort();
+
+        sel.innerHTML = '<option value="">All Locations</option>';
+        locs.forEach((loc) => {
+          const opt = document.createElement('option');
+          opt.value = loc;
+          opt.textContent = loc;
+          if (loc === currentVal) opt.selected = true;
+          sel.appendChild(opt);
+        });
+      }
+
+      function renderFilteredPriceInsights() {
+        const tbody = document.querySelector('#priceInsightsTable tbody');
+        if (!tbody) return;
+        tbody.innerHTML = '';
+
+        const locFilter = (document.getElementById('priceFilterLocation').value || '').trim().toLowerCase();
+        const bookQuery = (document.getElementById('priceFilterBook').value || '').trim().toLowerCase();
+
+        const filtered = allPriceInsights.filter((item) => {
+          const matchLoc = !locFilter || item.location.toLowerCase() === locFilter;
+          const matchBook = !bookQuery || item.bookName.toLowerCase().includes(bookQuery);
+          return matchLoc && matchBook;
+        });
+
+        if (!filtered.length) {
+          tbody.innerHTML = '<tr><td colspan="4" style="text-align:center; color:var(--muted); padding:16px;">No matching price records found. Try clearing filters.</td></tr>';
+          return;
+        }
+
+        filtered.forEach((item) => {
+          const tr = document.createElement('tr');
+          tr.innerHTML = `
+            <td><strong>${item.location}</strong></td>
+            <td>${item.bookName}</td>
+            <td><strong style="color: var(--primary-dark);">₹${item.averagePrice}</strong></td>
+            <td><span class="badge badge-blue">${item.priceRange}</span></td>
+          `;
+          tbody.appendChild(tr);
+        });
+      }
+
+      function loadTargets() {
+        const m = document.getElementById('targetMonthPicker').value;
+        const cacheKey = `targets:${m}`;
+        const container = document.getElementById('locationTargetsContainer');
+        const cachedTargets = getCachedData(cacheKey);
+        if (cachedTargets !== null) {
+          renderTargets(cachedTargets);
+          return;
+        }
+        if (container) {
+          container.innerHTML = '<p style="color:var(--muted);">Loading monthly targets...</p>';
+        }
+
+        google.script.run
+          .withSuccessHandler((data) => {
+            const targets = data.locationTargets || [];
+            setCachedData(cacheKey, targets);
+            renderTargets(targets);
+          })
+          .getLocationAnalyticsAndTargets(m);
+      }
+
+      function renderTargets(targets) {
+        const container = document.getElementById('locationTargetsContainer');
+        container.innerHTML = '';
+
+        if (!targets.length) {
+          container.innerHTML = '<p style="color:var(--muted);">No targets found for this month.</p>';
+          return;
+        }
+
+        targets.forEach((t) => {
+          const card = document.createElement('div');
+          card.className = 'target-card';
+          card.dataset.locationId = t.locationId || '';
+          card.innerHTML = `
+            <div class="target-header">
+              <span>📍 ${t.locationName}</span>
+              <span>${t.soldCopies} / ${t.target} Books (${t.progressPercent}%)</span>
+            </div>
+            <div class="progress-bar-bg">
+              <div class="progress-bar-fill" style="width: ${t.progressPercent}%;"></div>
+            </div>
+            <div style="font-size: 12px; color: var(--muted); margin-top: 6px;">Total Revenue: ₹${t.revenue.toLocaleString('en-IN')}</div>
+          `;
+          if (appData.currentUser && appData.currentUser.isAdmin && t.locationId && t.locationId !== 'LOC-CUSTOM') {
+            const controls = document.createElement('div');
+            controls.className = 'target-edit-controls';
+            const input = document.createElement('input');
+            input.className = 'target-input';
+            input.type = 'number';
+            input.min = '1';
+            input.step = '1';
+            input.value = t.target;
+            input.setAttribute('aria-label', `Monthly book target for ${t.locationName}`);
+            const button = document.createElement('button');
+            button.className = 'target-save-btn';
+            button.type = 'button';
+            button.textContent = 'Save Target';
+            controls.append(input, button);
+            card.appendChild(controls);
+          }
+          container.appendChild(card);
+        });
+      }
+
+      function loadHistory() {
+        const filters = {
+          recordedBy: document.getElementById('histRecordedByFilter').value,
+          location: document.getElementById('histLocationFilter').value,
+          month: document.getElementById('histMonthFilter').value
+        };
+        const cacheKey = `history:${JSON.stringify(filters)}`;
+        const cachedRows = getCachedData(cacheKey);
+        if (cachedRows !== null) {
+          appData.historyRecords = cachedRows;
+          renderHistoryTable();
+          return;
+        }
+
+        google.script.run
+          .withSuccessHandler((rows) => {
+            appData.historyRecords = rows || [];
+            setCachedData(cacheKey, appData.historyRecords);
+            renderHistoryTable();
+          })
+          .getTransactionsHistory(filters);
+      }
+
+      function loadSummarySales() {
+        const button = document.getElementById('btnGenerateSummary');
+        const cachedRows = getCachedData('sales:all');
+        if (cachedRows !== null) {
+          allSalesRecords = cachedRows;
+          button.disabled = false;
+          button.textContent = '📋 Generate & Save Event Summary';
+          return;
+        }
+
+        button.disabled = true;
+        button.textContent = 'Loading sales...';
+        google.script.run
+          .withSuccessHandler((rows) => {
+            allSalesRecords = rows || [];
+            setCachedData('sales:all', allSalesRecords);
+            button.disabled = false;
+            button.textContent = '📋 Generate & Save Event Summary';
+          })
+          .withFailureHandler((err) => {
+            button.disabled = false;
+            button.textContent = '📋 Generate & Save Event Summary';
+            showToast('Failed to load sales for summary: ' + err.message, false);
+          })
+          .getTransactionsHistory({ recordedBy: '', location: '', month: '' });
+      }
+
+      function renderHistoryTable() {
+        const tbody = document.querySelector('#historyTable tbody');
+        tbody.innerHTML = '';
+        const q = (document.getElementById('histSearchInput').value || '').toLowerCase().trim();
+
+        const filtered = (appData.historyRecords || []).filter((r) => {
+          if (!q) return true;
+          return (
+            r.bookName.toLowerCase().includes(q) ||
+            r.location.toLowerCase().includes(q) ||
+            r.subLocation.toLowerCase().includes(q) ||
+            r.sellerName.toLowerCase().includes(q) ||
+            r.recordedBy.toLowerCase().includes(q)
+          );
+        });
+
+        if (!filtered.length) {
+          tbody.innerHTML = '<tr><td colspan="9" style="text-align:center; color:var(--muted); padding:20px;">No sales found.</td></tr>';
+          return;
+        }
+
+        filtered.forEach((r, i) => {
+          const tr = document.createElement('tr');
+          const dateStr = r.date || (r.timestamp ? r.timestamp.substring(0, 10) : '—');
+          const locStr = r.subLocation ? `${r.location} (${r.subLocation})` : r.location;
+
+          tr.innerHTML = `
+            <td>${i + 1}</td>
+            <td>${dateStr}</td>
+            <td><strong>${r.bookName}</strong></td>
+            <td>${r.quantity}</td>
+            <td>₹${r.totalAmount.toLocaleString('en-IN')}</td>
+            <td>${locStr}</td>
+            <td>${r.sellerName}</td>
+            <td><span class="badge badge-blue">${r.recordedBy}</span></td>
+            <td style="color:var(--muted);">${r.notes || '—'}</td>
+          `;
+          tbody.appendChild(tr);
+        });
+      }
+
+      function loadInventory() {
+        const owner = document.getElementById('invOwnerFilter').value;
+        const status = document.getElementById('invStatusFilter').value;
+        const cacheKey = `inventory:${owner.trim().toLowerCase()}:${status}`;
+        const cachedRows = getCachedData(cacheKey);
+        if (cachedRows !== null) {
+          inventoryRows = cachedRows;
+          renderInventoryTable();
+          return;
+        }
+        google.script.run
+          .withSuccessHandler((rows) => {
+            inventoryRows = rows;
+            setCachedData(cacheKey, rows);
+            renderInventoryTable();
+          })
+          .getInventory(owner, status);
+      }
+
+      function renderInventoryTable() {
+        const tbody = document.querySelector('#invTable tbody');
+        const titleQuery = document.getElementById('invBookTitleFilter').value.trim().toLowerCase();
+        const filteredRows = inventoryRows.filter((row) => String(row.bookName || '').toLowerCase().includes(titleQuery));
+        tbody.innerHTML = '';
+        filteredRows.forEach((r, i) => {
+          const tr = document.createElement('tr');
+          const isAvail = r.quantityRemaining > 0;
+          tr.innerHTML = `
+            <td>${i + 1}</td>
+            <td><strong>${r.volunteerName}</strong></td>
+            <td>${r.bookName}</td>
+            <td><strong>${r.quantityRemaining}</strong></td>
+            <td><span class="badge ${isAvail ? 'badge-green' : 'badge-red'}">${isAvail ? 'In Stock' : 'Out of Stock'}</span></td>
+          `;
+          tbody.appendChild(tr);
+        });
+      }
+
+      function renderVolunteersTable() {
+        const tbody = document.querySelector('#volunteersTable tbody');
+        tbody.innerHTML = '';
+        (appData.allVolunteers || []).forEach((v) => {
+          const tr = document.createElement('tr');
+          const isActive = String(v.active).toLowerCase() === 'true';
+          const currentRole = String(v.role || 'user').toLowerCase();
+
+          tr.innerHTML = `
+            <td>${v.volunteerId}</td>
+            <td><strong>${v.name}</strong></td>
+            <td>${v.email}</td>
+            <td>
+              <select onchange="changeRole('${v.volunteerId}', this.value)" style="height: 30px; border-radius: 6px; border: 1px solid var(--line); font-weight:600;">
+                <option value="user" ${currentRole === 'user' ? 'selected' : ''}>User</option>
+                <option value="admin" ${currentRole === 'admin' ? 'selected' : ''}>Admin</option>
+              </select>
+            </td>
+            <td><code>${v.pin || '—'}</code></td>
+            <td><span class="badge ${isActive ? 'badge-green' : 'badge-red'}">${isActive ? 'Active' : 'Inactive'}</span></td>
+            <td>
+              <button style="border: 1px solid var(--line); border-radius: 6px; padding: 4px 8px; cursor: pointer; background: #fff;" onclick="toggleVolunteer('${v.volunteerId}', ${!isActive})">
+                ${isActive ? 'Disable' : 'Enable'}
+              </button>
+            </td>
+          `;
+          tbody.appendChild(tr);
+        });
+      }
+
+      function changeRole(volId, newRole) {
+        google.script.run
+          .withSuccessHandler((res) => {
+            showToast(res.message);
+            google.script.run.withSuccessHandler(onLookupLoaded).getLookupData(localStorage.getItem(SESSION_STORAGE_KEY));
+          })
+          .updateVolunteerRole(volId, newRole);
+      }
+
+      function toggleVolunteer(volId, makeActive) {
+        google.script.run
+          .withSuccessHandler((res) => {
+            showToast(res.message);
+            google.script.run.withSuccessHandler(onLookupLoaded).getLookupData(localStorage.getItem(SESSION_STORAGE_KEY));
+          })
+          .toggleVolunteerStatus(volId, makeActive);
+      }
+
+      function bindEventListeners() {
+        document.getElementById('btnAddSaleItem').addEventListener('click', addSaleItemRow);
+
+        document.getElementById('saleLocation').addEventListener('change', updateSubLocationSuggestions);
+        document.getElementById('sumLocation').addEventListener('change', updateSubLocationSuggestions);
+
+        // Price Filters
+        document.getElementById('priceFilterLocation').addEventListener('change', renderFilteredPriceInsights);
+        document.getElementById('priceFilterBook').addEventListener('input', renderFilteredPriceInsights);
+        document.getElementById('btnClearPriceFilters').addEventListener('click', () => {
+          document.getElementById('priceFilterLocation').value = '';
+          document.getElementById('priceFilterBook').value = '';
+          renderFilteredPriceInsights();
+        });
+
+        // Submit Login Modal
+        document.getElementById('btnSubmitLogin').addEventListener('click', () => {
+          const volId = document.getElementById('loginVolunteerSelect').value;
+          const pin = document.getElementById('loginPinInput').value.trim();
+
+          if (!volId) { showToast('Please select your volunteer name.', false); return; }
+          if (!pin) { showToast('Please enter your 4-digit PIN.', false); return; }
+
+          showToast('Verifying PIN...');
+          google.script.run
+            .withSuccessHandler((res) => {
+              if (res.success) {
+                localStorage.setItem(SESSION_STORAGE_KEY, res.token);
+                document.getElementById('loginModal').style.display = 'none';
+                loadAppDataWithToken(res.token);
+                showToast(`Welcome back, ${res.currentUser.name}!`);
+              } else {
+                showToast(res.message, false);
+              }
+            })
+            .withFailureHandler((err) => showToast(err.message, false))
+            .verifyVolunteerPin(volId, pin);
+        });
+
+        // Logout
+        document.getElementById('btnLogout').addEventListener('click', () => {
+          if (confirm('Log out of this device? You will need your PIN to log back in.')) {
+            localStorage.removeItem(SESSION_STORAGE_KEY);
+            location.reload();
+          }
+        });
+
+        // Submit Sale Transaction
+        document.getElementById('btnSubmitSale').addEventListener('click', () => {
+          const loc = document.getElementById('saleLocation').value.trim();
+          const subLoc = document.getElementById('saleSubLocation').value.trim();
+          const date = document.getElementById('saleDate').value.trim();
+          const seller = document.getElementById('saleVolunteer').value.trim();
+          const stockOwner = document.getElementById('saleStockOwner').value.trim();
+          const notes = document.getElementById('saleNotes').value.trim();
+
+          if (!loc) { showToast('Please select a Major Location.', false); return; }
+          if (!subLoc) { showToast('Please enter Sub-Location / Landmark.', false); return; }
+          if (!date) { showToast('Please select an Event Date.', false); return; }
+          if (!seller) { showToast('Please select Sold By.', false); return; }
+
+          const items = [];
+          let hasInvalid = false;
+
+          document.querySelectorAll('.item-row').forEach((row) => {
+            const b = row.querySelector('.inp-book-search').value.trim();
+            const q = row.querySelector('.inp-qty').value;
+            const p = row.querySelector('.inp-price').value;
+            if (!b || p === '') hasInvalid = true;
+            items.push({ bookName: b, quantity: q, unitPrice: p });
+          });
+
+          if (hasInvalid || items.length === 0) {
+            showToast('Please specify valid book and selling price for each item.', false);
+            return;
+          }
+
+          const payload = {
+            location: loc,
+            subLocation: subLoc,
+            eventDate: date,
+            sellerName: seller,
+            stockOwnerName: stockOwner,
+            notes: notes,
+            items: items
+          };
+
+          const token = localStorage.getItem(SESSION_STORAGE_KEY);
+          showToast('Saving sale...');
+          google.script.run
+            .withSuccessHandler((res) => {
+              showToast(res.message);
+              document.getElementById('saleItemsList').innerHTML = '';
+              addSaleItemRow();
+              document.getElementById('saleNotes').value = '';
+              invalidateCachedData('priceInsights');
+              invalidateCachedData('targets:');
+              allSalesRecords = null;
+              invalidateCachedData('sales:');
+              invalidateCachedData('history:');
+            })
+            .withFailureHandler((err) => showToast(err.message, false))
+            .recordMultiItemSale(payload, token);
+        });
+
+        // Quick Add Major Location
+        document.getElementById('btnQuickAddLoc').addEventListener('click', () => {
+          const locName = prompt('Enter new major location name:');
+          if (!locName || !locName.trim()) return;
+          const targetStr = prompt('Enter monthly book target (e.g. 100):', '100');
+          const target = parseInt(targetStr, 10) || 100;
+
+          google.script.run
+            .withSuccessHandler((res) => {
+              showToast(res.message);
+              google.script.run.withSuccessHandler(onLookupLoaded).getLookupData(localStorage.getItem(SESSION_STORAGE_KEY));
+            })
+            .withFailureHandler((err) => showToast(err.message, false))
+            .addNewLocation(locName.trim(), target);
+        });
+
+        // Add Volunteer Submit (Admin Feature)
+        document.getElementById('btnAddVolunteerSubmit').addEventListener('click', () => {
+          const name = document.getElementById('newVolName').value.trim();
+          const email = document.getElementById('newVolEmail').value.trim();
+          const role = document.getElementById('newVolRole').value;
+          const pin = document.getElementById('newVolPin').value.trim();
+
+          if (!name) { showToast('Please enter Volunteer Name.', false); return; }
+          if (!email || !email.includes('@')) { showToast('Please enter a valid Gmail address.', false); return; }
+          if (!pin) { showToast('Please set an initial PIN.', false); return; }
+
+          showToast('Registering volunteer...');
+          google.script.run
+            .withSuccessHandler((res) => {
+              showToast(res.message);
+              document.getElementById('newVolName').value = '';
+              document.getElementById('newVolEmail').value = '';
+              google.script.run.withSuccessHandler(onLookupLoaded).getLookupData(localStorage.getItem(SESSION_STORAGE_KEY));
+            })
+            .withFailureHandler((err) => showToast(err.message, false))
+            .addVolunteer({ name: name, email: email, role: role, pin: pin });
+        });
+
+        // Summary Actions
+        document.getElementById('sumVolunteers').addEventListener('click', () => {
+          const isOpen = document.getElementById('sumVolunteers').getAttribute('aria-expanded') === 'true';
+          setSummaryVolunteerDropdownOpen(!isOpen);
+        });
+        document.getElementById('btnGenerateSummary').addEventListener('click', generateInteractionSummary);
+        document.getElementById('btnCopySummary').addEventListener('click', () => {
+          const text = document.getElementById('summaryTextOutput').textContent;
+          navigator.clipboard.writeText(text).then(() => showToast('Summary copied to clipboard!'));
+        });
+
+        // Stock Tab Switching
+        document.getElementById('tabBtnSingleStock').addEventListener('click', () => {
+          document.getElementById('tabBtnSingleStock').classList.add('active');
+          document.getElementById('tabBtnBulkStock').classList.remove('active');
+          document.getElementById('secSingleStock').style.display = 'block';
+          document.getElementById('secBulkStock').style.display = 'none';
+        });
+
+        document.getElementById('tabBtnBulkStock').addEventListener('click', () => {
+          document.getElementById('tabBtnBulkStock').classList.add('active');
+          document.getElementById('tabBtnSingleStock').classList.remove('active');
+          document.getElementById('secBulkStock').style.display = 'block';
+          document.getElementById('secSingleStock').style.display = 'none';
+        });
+
+        // Submit Single Title Stock
+        document.getElementById('btnSubmitSingleStock').addEventListener('click', () => {
+          const vol = document.getElementById('addStockOwner').value;
+          const book = document.getElementById('singleStockBookInput').value.trim();
+          const qty = parseInt(document.getElementById('singleStockQty').value, 10);
+
+          if (!vol) { showToast('Please select a volunteer.', false); return; }
+          if (!book) { showToast('Please select a book title.', false); return; }
+          if (isNaN(qty) || qty <= 0) { showToast('Please enter a valid quantity.', false); return; }
+
+          showToast('Allocating stock...');
+          google.script.run
+            .withSuccessHandler((res) => {
+              showToast(res.message);
+              document.getElementById('singleStockBookInput').value = '';
+              invalidateCachedData('inventory:');
+              loadInventory();
+            })
+            .withFailureHandler((err) => showToast(err.message, false))
+            .commitStockAllocation([{ bookName: book, quantity: qty }], vol);
+        });
+
+        // Bulk Preview & Discrepancy Matching
+        document.getElementById('btnPreviewBulkStock').addEventListener('click', () => {
+          const text = document.getElementById('bulkStockPasteInput').value.trim();
+          if (!text) { showToast('Please paste book titles and quantities.', false); return; }
+
+          showToast('Matching titles against standard catalogue...');
+          google.script.run
+            .withSuccessHandler((res) => {
+              renderBulkReviewTable(res);
+            })
+            .withFailureHandler((err) => showToast(err.message, false))
+            .previewAndMatchBulkStock(text);
+        });
+
+        // Confirm Bulk Allocation
+        document.getElementById('btnConfirmBulkStock').addEventListener('click', () => {
+          const vol = document.getElementById('addStockOwner').value;
+          if (!vol) { showToast('Please select a volunteer.', false); return; }
+
+          const finalItems = [];
+          const rows = document.querySelectorAll('#bulkReviewTable tbody tr');
+          let hasUnresolved = false;
+
+          rows.forEach((tr) => {
+            const selectEl = tr.querySelector('.bulk-select-book');
+            const qtyInput = tr.querySelector('.bulk-input-qty');
+            const chosenBook = selectEl ? selectEl.value : '';
+            const qty = parseInt(qtyInput ? qtyInput.value : 0, 10);
+
+            if (!chosenBook) hasUnresolved = true;
+            finalItems.push({ bookName: chosenBook, quantity: qty });
+          });
+
+          if (hasUnresolved || finalItems.length === 0) {
+            showToast('Please resolve all unmatched book titles before committing.', false);
+            return;
+          }
+
+          showToast('Committing stock to spreadsheet...');
+          google.script.run
+            .withSuccessHandler((res) => {
+              showToast(res.message);
+              document.getElementById('bulkStockPasteInput').value = '';
+              document.getElementById('bulkReviewWrapper').style.display = 'none';
+              invalidateCachedData('inventory:');
+              loadInventory();
+            })
+            .withFailureHandler((err) => showToast(err.message, false))
+            .commitStockAllocation(finalItems, vol);
+        });
+
+        // History Filters
+        document.getElementById('histLocationFilter').addEventListener('change', loadHistory);
+        document.getElementById('histRecordedByFilter').addEventListener('change', loadHistory);
+        document.getElementById('histMonthFilter').addEventListener('change', loadHistory);
+        document.getElementById('histSearchInput').addEventListener('input', renderHistoryTable);
+        document.getElementById('targetMonthPicker').addEventListener('change', loadTargets);
+        document.getElementById('locationTargetsContainer').addEventListener('click', (event) => {
+          const button = event.target.closest('.target-save-btn');
+          if (!button) return;
+
+          const card = button.closest('.target-card');
+          const targetInput = card.querySelector('.target-input');
+          const target = Number(targetInput.value);
+          if (!Number.isInteger(target) || target < 1) {
+            showToast('Monthly target must be a positive whole number.', false);
+            return;
+          }
+
+          button.disabled = true;
+          button.textContent = 'Saving...';
+          google.script.run
+            .withSuccessHandler((res) => {
+              showToast(res.message);
+              invalidateCachedData('targets:');
+              loadTargets();
+            })
+            .withFailureHandler((err) => {
+              button.disabled = false;
+              button.textContent = 'Save Target';
+              showToast(err.message, false);
+            })
+            .updateLocationTarget(card.dataset.locationId, target, localStorage.getItem(SESSION_STORAGE_KEY));
+        });
+        document.getElementById('invOwnerFilter').addEventListener('change', loadInventory);
+        document.getElementById('invStatusFilter').addEventListener('change', loadInventory);
+        document.getElementById('invBookTitleFilter').addEventListener('input', renderInventoryTable);
+      }
+
+      function renderBulkReviewTable(data) {
+        const tbody = document.querySelector('#bulkReviewTable tbody');
+        tbody.innerHTML = '';
+
+        if (!data.items || !data.items.length) {
+          showToast('No valid lines detected in paste area.', false);
+          return;
+        }
+
+        const catalogOpts = data.catalogBooks.map((b) => `<option value="${b}">${b}</option>`).join('');
+
+        data.items.forEach((item) => {
+          const tr = document.createElement('tr');
+          const isMatched = item.isMatched;
+
+          tr.innerHTML = `
+            <td><code>${item.originalInput}</code></td>
+            <td>
+              <select class="bulk-select-book" style="width: 100%; height: 34px; border: 1px solid var(--line); border-radius: 6px;">
+                <option value="">-- Choose Standard Title --</option>
+                ${catalogOpts}
+              </select>
+            </td>
+            <td>
+              <input type="number" class="bulk-input-qty" value="${item.quantity}" min="1" style="width: 60px; height: 34px; border: 1px solid var(--line); border-radius: 6px; padding: 4px;" />
+            </td>
+            <td>
+              <span class="badge ${isMatched ? 'badge-green' : 'badge-orange'}">
+                ${isMatched ? 'Matched' : 'Discrepancy (Select)'}
+              </span>
+            </td>
+          `;
+
+          const sel = tr.querySelector('.bulk-select-book');
+          if (item.matchedTitle) {
+            sel.value = item.matchedTitle;
+          }
+
+          tbody.appendChild(tr);
+        });
+
+        document.getElementById('bulkReviewWrapper').style.display = 'block';
+      }
+
+      init();
+    </script>
+  </body>
+</html>
