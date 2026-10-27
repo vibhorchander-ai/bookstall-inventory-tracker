@@ -774,6 +774,7 @@
                 <option value="available" selected>In Stock (> 0)</option>
                 <option value="out_of_stock">Out of Stock (= 0)</option>
               </select>
+              <input id="invBookTitleFilter" type="search" aria-label="Filter inventory by book title" placeholder="Filter by book title" style="height: 40px; min-width: 220px; border: 1px solid var(--line); border-radius: 8px; padding: 0 10px;" />
             </div>
 
             <div class="table-responsive">
@@ -873,6 +874,7 @@
       };
 
       let allPriceInsights = [];
+      let inventoryRows = [];
       const SESSION_STORAGE_KEY = 'cc_stall_user_session_token';
 
       function showToast(msg, isSuccess = true) {
@@ -1478,22 +1480,29 @@ ${bookListStr}`;
         const status = document.getElementById('invStatusFilter').value;
         google.script.run
           .withSuccessHandler((rows) => {
-            const tbody = document.querySelector('#invTable tbody');
-            tbody.innerHTML = '';
-            rows.forEach((r, i) => {
-              const tr = document.createElement('tr');
-              const isAvail = r.quantityRemaining > 0;
-              tr.innerHTML = `
-                <td>${i + 1}</td>
-                <td><strong>${r.volunteerName}</strong></td>
-                <td>${r.bookName}</td>
-                <td><strong>${r.quantityRemaining}</strong></td>
-                <td><span class="badge ${isAvail ? 'badge-green' : 'badge-red'}">${isAvail ? 'In Stock' : 'Out of Stock'}</span></td>
-              `;
-              tbody.appendChild(tr);
-            });
+            inventoryRows = rows;
+            renderInventoryTable();
           })
           .getInventory(owner, status);
+      }
+
+      function renderInventoryTable() {
+        const tbody = document.querySelector('#invTable tbody');
+        const titleQuery = document.getElementById('invBookTitleFilter').value.trim().toLowerCase();
+        const filteredRows = inventoryRows.filter((row) => String(row.bookName || '').toLowerCase().includes(titleQuery));
+        tbody.innerHTML = '';
+        filteredRows.forEach((r, i) => {
+          const tr = document.createElement('tr');
+          const isAvail = r.quantityRemaining > 0;
+          tr.innerHTML = `
+            <td>${i + 1}</td>
+            <td><strong>${r.volunteerName}</strong></td>
+            <td>${r.bookName}</td>
+            <td><strong>${r.quantityRemaining}</strong></td>
+            <td><span class="badge ${isAvail ? 'badge-green' : 'badge-red'}">${isAvail ? 'In Stock' : 'Out of Stock'}</span></td>
+          `;
+          tbody.appendChild(tr);
+        });
       }
 
       function renderVolunteersTable() {
@@ -1790,6 +1799,7 @@ ${bookListStr}`;
         document.getElementById('targetMonthPicker').addEventListener('change', loadTargets);
         document.getElementById('invOwnerFilter').addEventListener('change', loadInventory);
         document.getElementById('invStatusFilter').addEventListener('change', loadInventory);
+        document.getElementById('invBookTitleFilter').addEventListener('input', renderInventoryTable);
       }
 
       function renderBulkReviewTable(data) {
