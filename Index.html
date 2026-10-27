@@ -875,7 +875,28 @@
 
       let allPriceInsights = [];
       let inventoryRows = [];
+      const DATA_CACHE_TTL_MS = 2 * 60 * 1000;
+      const dataCache = new Map();
       const SESSION_STORAGE_KEY = 'cc_stall_user_session_token';
+
+      function getCachedData(key) {
+        const entry = dataCache.get(key);
+        if (!entry || Date.now() - entry.cachedAt >= DATA_CACHE_TTL_MS) {
+          dataCache.delete(key);
+          return null;
+        }
+        return entry.value;
+      }
+
+      function setCachedData(key, value) {
+        dataCache.set(key, { value: value, cachedAt: Date.now() });
+      }
+
+      function invalidateCachedData(prefix) {
+        Array.from(dataCache.keys()).forEach((key) => {
+          if (key.startsWith(prefix)) dataCache.delete(key);
+        });
+      }
 
       function showToast(msg, isSuccess = true) {
         const el = document.createElement('div');
@@ -1314,6 +1335,14 @@ ${bookListStr}`;
       }
 
       function loadPriceInsights() {
+        const cachedInsights = getCachedData('priceInsights');
+        if (cachedInsights !== null) {
+          allPriceInsights = cachedInsights;
+          populatePriceLocationFilter();
+          renderFilteredPriceInsights();
+          return;
+        }
+
         const tbody = document.querySelector('#priceInsightsTable tbody');
         if (tbody) {
           tbody.innerHTML = '<tr><td colspan="4" style="text-align:center; color:var(--muted); padding:16px;">Loading price data...</td></tr>';
@@ -1322,6 +1351,7 @@ ${bookListStr}`;
         google.script.run
           .withSuccessHandler((data) => {
             allPriceInsights = data.locationPriceInsights || [];
+            setCachedData('priceInsights', allPriceInsights);
             populatePriceLocationFilter();
             renderFilteredPriceInsights();
           })
@@ -1381,14 +1411,22 @@ ${bookListStr}`;
 
       function loadTargets() {
         const m = document.getElementById('targetMonthPicker').value;
+        const cacheKey = `targets:${m}`;
         const container = document.getElementById('locationTargetsContainer');
+        const cachedTargets = getCachedData(cacheKey);
+        if (cachedTargets !== null) {
+          renderTargets(cachedTargets);
+          return;
+        }
         if (container) {
           container.innerHTML = '<p style="color:var(--muted);">Loading monthly targets...</p>';
         }
 
         google.script.run
           .withSuccessHandler((data) => {
-            renderTargets(data.locationTargets || []);
+            const targets = data.locationTargets || [];
+            setCachedData(cacheKey, targets);
+            renderTargets(targets);
           })
           .getLocationAnalyticsAndTargets(m);
       }
@@ -1478,9 +1516,17 @@ ${bookListStr}`;
       function loadInventory() {
         const owner = document.getElementById('invOwnerFilter').value;
         const status = document.getElementById('invStatusFilter').value;
+        const cacheKey = `inventory:${owner.trim().toLowerCase()}:${status}`;
+        const cachedRows = getCachedData(cacheKey);
+        if (cachedRows !== null) {
+          inventoryRows = cachedRows;
+          renderInventoryTable();
+          return;
+        }
         google.script.run
           .withSuccessHandler((rows) => {
             inventoryRows = rows;
+            setCachedData(cacheKey, rows);
             renderInventoryTable();
           })
           .getInventory(owner, status);
@@ -1648,6 +1694,8 @@ ${bookListStr}`;
               document.getElementById('saleItemsList').innerHTML = '';
               addSaleItemRow();
               document.getElementById('saleNotes').value = '';
+              invalidateCachedData('priceInsights');
+              invalidateCachedData('targets:');
               loadHistory();
             })
             .withFailureHandler((err) => showToast(err.message, false))
@@ -1734,6 +1782,7 @@ ${bookListStr}`;
             .withSuccessHandler((res) => {
               showToast(res.message);
               document.getElementById('singleStockBookInput').value = '';
+              invalidateCachedData('inventory:');
               loadInventory();
             })
             .withFailureHandler((err) => showToast(err.message, false))
@@ -1784,6 +1833,7 @@ ${bookListStr}`;
               showToast(res.message);
               document.getElementById('bulkStockPasteInput').value = '';
               document.getElementById('bulkReviewWrapper').style.display = 'none';
+              invalidateCachedData('inventory:');
               loadInventory();
             })
             .withFailureHandler((err) => showToast(err.message, false))
