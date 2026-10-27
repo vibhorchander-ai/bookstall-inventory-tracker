@@ -899,6 +899,7 @@
 
       let allPriceInsights = [];
       let inventoryRows = [];
+      let allSalesRecords = null;
       const DATA_CACHE_TTL_MS = 2 * 60 * 1000;
       const dataCache = new Map();
       const SESSION_STORAGE_KEY = 'cc_stall_user_session_token';
@@ -939,6 +940,7 @@
         document.querySelectorAll('.page-section').forEach((s) => s.classList.toggle('active', s.id === pageId));
         document.querySelectorAll('.nav-btn').forEach((b) => b.classList.toggle('active', b.dataset.page === pageId));
         if (pageId === 'page-history') loadHistory();
+        if (pageId === 'page-summary') loadSummarySales();
         if (pageId === 'page-targets') loadTargets();
         if (pageId === 'page-prices') loadPriceInsights();
         if (pageId === 'page-inventory') loadInventory();
@@ -1037,7 +1039,6 @@
 
         document.getElementById('saleItemsList').innerHTML = '';
         addSaleItemRow();
-        loadHistory();
         renderVolunteersTable();
         initSingleStockTypeahead();
       }
@@ -1297,7 +1298,13 @@
           formattedDate = d.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
         }
 
-        const matchedSales = (appData.historyRecords || []).filter((s) => {
+        if (getCachedData('sales:all') === null) {
+          loadSummarySales();
+          showToast('Loading sales data. Please try again shortly.', false);
+          return;
+        }
+
+        const matchedSales = (allSalesRecords || []).filter((s) => {
           const sDate = s.date || (s.timestamp ? s.timestamp.substring(0, 10) : '');
           const mDate = dateRaw ? sDate === dateRaw : true;
           const mLoc = loc ? s.location.toLowerCase() === loc.toLowerCase() : true;
@@ -1505,13 +1512,48 @@ ${bookListStr}`;
           location: document.getElementById('histLocationFilter').value,
           month: document.getElementById('histMonthFilter').value
         };
+        const cacheKey = `history:${JSON.stringify(filters)}`;
+        const cachedRows = getCachedData(cacheKey);
+        if (cachedRows !== null) {
+          appData.historyRecords = cachedRows;
+          renderHistoryTable();
+          return;
+        }
 
         google.script.run
           .withSuccessHandler((rows) => {
             appData.historyRecords = rows || [];
+            setCachedData(cacheKey, appData.historyRecords);
             renderHistoryTable();
           })
           .getTransactionsHistory(filters);
+      }
+
+      function loadSummarySales() {
+        const button = document.getElementById('btnGenerateSummary');
+        const cachedRows = getCachedData('sales:all');
+        if (cachedRows !== null) {
+          allSalesRecords = cachedRows;
+          button.disabled = false;
+          button.textContent = '📋 Generate & Save Event Summary';
+          return;
+        }
+
+        button.disabled = true;
+        button.textContent = 'Loading sales...';
+        google.script.run
+          .withSuccessHandler((rows) => {
+            allSalesRecords = rows || [];
+            setCachedData('sales:all', allSalesRecords);
+            button.disabled = false;
+            button.textContent = '📋 Generate & Save Event Summary';
+          })
+          .withFailureHandler((err) => {
+            button.disabled = false;
+            button.textContent = '📋 Generate & Save Event Summary';
+            showToast('Failed to load sales for summary: ' + err.message, false);
+          })
+          .getTransactionsHistory({ recordedBy: '', location: '', month: '' });
       }
 
       function renderHistoryTable() {
@@ -1738,7 +1780,9 @@ ${bookListStr}`;
               document.getElementById('saleNotes').value = '';
               invalidateCachedData('priceInsights');
               invalidateCachedData('targets:');
-              loadHistory();
+              allSalesRecords = null;
+              invalidateCachedData('sales:');
+              invalidateCachedData('history:');
             })
             .withFailureHandler((err) => showToast(err.message, false))
             .recordMultiItemSale(payload, token);
