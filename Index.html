@@ -572,7 +572,7 @@
               </div>
               <div class="field">
                 <label>Duration</label>
-                <input id="sumDuration" type="text" placeholder="1.5 hours" />
+                <input id="sumDuration" type="number" min="0" step="any" placeholder="e.g. 1.5" />
               </div>
               <div class="field">
                 <label>AP Mirror App Installs</label>
@@ -1230,13 +1230,19 @@
         const volunteers = volunteerNames.join(', ');
         const dateRaw = document.getElementById('sumDate').value.trim();
         const interactions = document.getElementById('sumInteractions').value.trim() || '—';
-        const duration = document.getElementById('sumDuration').value.trim() || '—';
+        const durationRaw = document.getElementById('sumDuration').value.trim();
+        const duration = durationRaw === '' ? '' : Number(durationRaw);
+        const durationDisplay = durationRaw === '' ? '—' : durationRaw;
         const appInstalls = document.getElementById('sumAppInstalls').value.trim() || '0';
 
         if (!loc) { showToast('Please select Major Location.', false); return; }
         if (!subLoc) { showToast('Please enter Sub-Location / Landmark.', false); return; }
         if (!volunteers) { showToast('Please enter Volunteers on Duty.', false); return; }
         if (!dateRaw) { showToast('Please select Date.', false); return; }
+        if (duration !== '' && (!Number.isFinite(duration) || duration < 0)) {
+          showToast('Duration must be a non-negative number of hours.', false);
+          return;
+        }
 
         let formattedDate = dateRaw;
         if (dateRaw) {
@@ -1277,8 +1283,8 @@
 👥Volunteer: ${volunteers}
 📅Date: ${formattedDate}
 📚Books Reached: ${totalBooks}
-🗣️Interactions: ${interactions}
-⏳Duration: ${duration}
+🗣️Interactions: ~${interactions}
+⏳Duration: ${durationDisplay} hours
 AP mirror installation: ${appInstalls}
 
 Books reached :

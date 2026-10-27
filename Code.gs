@@ -368,12 +368,15 @@ function saveEventSummary(summaryData) {
   const date = String(summaryData.date || '').trim();
   const volunteers = String(summaryData.volunteers || '').trim();
   const interactions = String(summaryData.interactions || '').trim();
-  const duration = String(summaryData.duration || '').trim();
+  const duration = summaryData.duration === '' || summaryData.duration == null ? '' : Number(summaryData.duration);
   const appInstalls = Number(summaryData.appInstalls || 0);
 
   if (!location) throw new Error('Location is required.');
   if (!subLocation) throw new Error('Sub-location is required.');
   if (!date) throw new Error('Date is required.');
+  if (duration !== '' && (!Number.isFinite(duration) || duration < 0)) {
+    throw new Error('Duration must be a non-negative number of hours.');
+  }
 
   const eventsSheet = getSheetByName(SHEET_NAMES.events);
   const values = eventsSheet.getDataRange().getValues();
