@@ -607,7 +607,11 @@
               </div>
               <div class="field">
                 <label>Sub-Location / Landmark *</label>
-                <input id="sumSubLoc" list="subLocationsSuggestions" type="text" placeholder="Pick suggestion or type landmark..." autocomplete="off" />
+                <select id="sumSubLoc">
+                  <option value="">-- Select landmark --</option>
+                  <option value="__other__">Other / enter manually</option>
+                </select>
+                <input id="sumCustomSubLoc" type="text" placeholder="Enter a new landmark" autocomplete="off" style="display: none; margin-top: 8px;" />
               </div>
             </div>
 
@@ -958,6 +962,7 @@
       const DATA_CACHE_TTL_MS = 2 * 60 * 1000;
       const dataCache = new Map();
       const SESSION_STORAGE_KEY = 'cc_stall_user_session_token';
+      const LAST_SALE_LOCATION_KEY = 'cc_stall_last_sale_location';
 
       function getCachedData(key) {
         const entry = dataCache.get(key);
@@ -1052,7 +1057,10 @@
         document.querySelectorAll('.nav-btn').forEach((b) => b.classList.toggle('active', b.dataset.page === pageId));
         if (pageId === 'page-history') loadHistory();
         if (pageId === 'page-history' && appData.currentUser && appData.currentUser.isAdmin) loadSalesSummary();
-        if (pageId === 'page-summary') loadSummarySales();
+        if (pageId === 'page-summary') {
+          updateSubLocationSuggestions();
+          loadSummarySales();
+        }
         if (pageId === 'page-targets') loadTargets();
         if (pageId === 'page-prices') loadPriceInsights();
         if (pageId === 'page-inventory') loadInventory();
@@ -1161,6 +1169,9 @@
         locSelects.forEach((id) => {
           const el = document.getElementById(id);
           if (!el) return;
+          const previousValue = id === 'saleLocation'
+            ? el.value || localStorage.getItem(LAST_SALE_LOCATION_KEY) || ''
+            : el.value;
           const isFilter = id.includes('Filter');
           el.innerHTML = isFilter ? '<option value="">All Locations</option>' : '';
           appData.locations.forEach((loc) => {
@@ -1169,6 +1180,11 @@
             opt.textContent = loc.locationName;
             el.appendChild(opt);
           });
+          if (Array.from(el.options).some((option) => option.value === previousValue)) {
+            el.value = previousValue;
+          } else if (id === 'saleLocation') {
+            localStorage.removeItem(LAST_SALE_LOCATION_KEY);
+          }
         });
 
         const volSelects = ['saleVolunteer', 'saleStockOwner', 'addStockOwner', 'invOwnerFilter', 'histRecordedByFilter'];
@@ -1223,19 +1239,35 @@
 
       function updateSubLocationSuggestions() {
         const activeSection = document.querySelector('.page-section.active');
-        let loc = '';
-
-        if (activeSection && activeSection.id === 'page-summary') {
-          loc = document.getElementById('sumLocation').value;
-        } else {
-          loc = document.getElementById('saleLocation').value;
-        }
+        const isSummaryPage = activeSection && activeSection.id === 'page-summary';
+        const loc = isSummaryPage
+          ? document.getElementById('sumLocation').value
+          : document.getElementById('saleLocation').value;
 
         const datalist = document.getElementById('subLocationsSuggestions');
         if (!datalist) return;
         datalist.innerHTML = '';
 
         const knownSubs = (appData.subLocationsMap && appData.subLocationsMap[loc]) || [];
+        if (isSummaryPage) {
+          const subLocationSelect = document.getElementById('sumSubLoc');
+          const previousValue = subLocationSelect.value;
+          subLocationSelect.innerHTML = '<option value="">-- Select landmark --</option>';
+          knownSubs.forEach((subName) => {
+            const option = document.createElement('option');
+            option.value = subName;
+            option.textContent = subName;
+            subLocationSelect.appendChild(option);
+          });
+          const otherOption = document.createElement('option');
+          otherOption.value = '__other__';
+          otherOption.textContent = 'Other / enter manually';
+          subLocationSelect.appendChild(otherOption);
+          if (knownSubs.includes(previousValue)) subLocationSelect.value = previousValue;
+          document.getElementById('sumCustomSubLoc').style.display = 'none';
+          document.getElementById('sumCustomSubLoc').value = '';
+        }
+
         knownSubs.forEach((subName) => {
           const opt = document.createElement('option');
           opt.value = subName;
@@ -1381,7 +1413,10 @@
 
       function generateInteractionSummary() {
         const loc = document.getElementById('sumLocation').value.trim();
-        const subLoc = document.getElementById('sumSubLoc').value.trim();
+        const selectedSubLoc = document.getElementById('sumSubLoc').value;
+        const subLoc = selectedSubLoc === '__other__'
+          ? document.getElementById('sumCustomSubLoc').value.trim()
+          : selectedSubLoc.trim();
         const selectedVolunteers = Array.from(document.querySelectorAll('#sumVolunteerDropdown input:checked'))
           .map((checkbox) => checkbox.value);
         const additionalVolunteers = document.getElementById('sumAdditionalVolunteers').value
@@ -1801,8 +1836,17 @@ ${bookListStr}`;
       function bindEventListeners() {
         document.getElementById('btnAddSaleItem').addEventListener('click', addSaleItemRow);
 
-        document.getElementById('saleLocation').addEventListener('change', updateSubLocationSuggestions);
+        document.getElementById('saleLocation').addEventListener('change', (event) => {
+          localStorage.setItem(LAST_SALE_LOCATION_KEY, event.target.value);
+          updateSubLocationSuggestions();
+        });
         document.getElementById('sumLocation').addEventListener('change', updateSubLocationSuggestions);
+        document.getElementById('sumSubLoc').addEventListener('change', (event) => {
+          const customInput = document.getElementById('sumCustomSubLoc');
+          const showCustomInput = event.target.value === '__other__';
+          customInput.style.display = showCustomInput ? 'block' : 'none';
+          if (showCustomInput) customInput.focus();
+        });
 
         // Price Filters
         document.getElementById('priceFilterLocation').addEventListener('change', renderFilteredPriceInsights);
