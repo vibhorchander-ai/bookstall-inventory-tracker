@@ -1454,9 +1454,10 @@
 
         const matchedSales = (allSalesRecords || []).filter((s) => {
           const sDate = s.date || (s.timestamp ? s.timestamp.substring(0, 10) : '');
-          const mDate = dateRaw ? sDate === dateRaw : true;
-          const mLoc = loc ? s.location.toLowerCase() === loc.toLowerCase() : true;
-          return mDate && mLoc;
+          const mDate = sDate === dateRaw;
+          const mLoc = String(s.location || '').trim().toLowerCase() === loc.toLowerCase();
+          const mSubLoc = String(s.subLocation || '').trim().toLowerCase() === subLoc.toLowerCase();
+          return mDate && mLoc && mSubLoc;
         });
 
         const bookCounts = {};
@@ -1934,6 +1935,11 @@ ${bookListStr}`;
           google.script.run
             .withSuccessHandler((res) => {
               showToast(res.message);
+              appData.subLocationsMap = appData.subLocationsMap || {};
+              const knownSubLocations = appData.subLocationsMap[loc] || [];
+              if (!knownSubLocations.some((name) => String(name).trim().toLowerCase() === subLoc.toLowerCase())) {
+                appData.subLocationsMap[loc] = [...knownSubLocations, subLoc];
+              }
               document.getElementById('saleItemsList').innerHTML = '';
               addSaleItemRow();
               document.getElementById('saleNotes').value = '';

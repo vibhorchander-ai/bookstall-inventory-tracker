@@ -579,7 +579,7 @@ function getNormalizedSalesWithLocations() {
     return {
       saleId: String(s.saleId || ''),
       timestamp: isoString,
-      date: isoString ? isoString.substring(0, 10) : ev.date,
+      date: normalizeEventDate(ev.date) || (isoString ? isoString.substring(0, 10) : ''),
       bookName: String(s.bookName || '').trim(),
       eventId: eventId,
       location: location,
