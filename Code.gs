@@ -65,7 +65,7 @@ function ensureSheetsExist() {
     Books: ['bookId', 'bookName', 'category', 'language', 'active'],
     Locations: ['locationId', 'locationName', 'monthlyTarget', 'active'],
     Volunteers: ['volunteerId', 'name', 'email', 'role', 'pin', 'active'],
-    Events: ['eventId', 'location', 'subLocation', 'date', 'volunteers', 'interactions', 'duration', 'appInstalls'],
+    Events: ['eventId', 'location', 'subLocation', 'date', 'volunteers', 'interactions', 'durationHours', 'booksDistributed', 'appInstalls', 'status'],
     Stock: ['stockId', 'bookName', 'volunteerName', 'quantityReceived', 'quantityRemaining'],
     Sales: ['saleId', 'timestamp', 'bookName', 'eventId', 'location', 'subLocation', 'sellerName', 'stockOwnerName', 'quantity', 'unitPrice', 'recordedBy', 'notes']
   };
@@ -326,26 +326,47 @@ function getLookupData(sessionToken) {
 // SALES & EVENTS LOGIC
 // =============================================================================
 
+function normalizeEventDate(value) {
+  if (value instanceof Date && !isNaN(value.getTime())) {
+    return Utilities.formatDate(value, Session.getScriptTimeZone(), 'yyyy-MM-dd');
+  }
+
+  const dateText = String(value || '').trim();
+  const isoDate = dateText.match(/^\d{4}-\d{2}-\d{2}/);
+  if (isoDate) return isoDate[0];
+  if (!dateText) return '';
+
+  const parsedDate = new Date(dateText);
+  return isNaN(parsedDate.getTime())
+    ? dateText
+    : Utilities.formatDate(parsedDate, Session.getScriptTimeZone(), 'yyyy-MM-dd');
+}
+
 function createOrFindEvent(location, subLocation, date) {
   const eventsSheet = getSheetByName(SHEET_NAMES.events);
-  const rows = getAllRows(SHEET_NAMES.events);
+  const values = eventsSheet.getDataRange().getValues();
+  const headers = values[0].map((h) => String(h || '').trim().toLowerCase());
+  const eventIdIdx = headers.indexOf('eventid');
+  const locIdx = headers.indexOf('location');
+  const subLocIdx = headers.indexOf('sublocation');
+  const dateIdx = headers.indexOf('date');
+  const statusIdx = headers.indexOf('status');
 
   const loc = String(location || '').trim();
   const subLoc = String(subLocation || '').trim();
-  const dt = String(date || '').trim();
+  const dt = normalizeEventDate(date);
 
-  const found = rows.find(
-    (r) => String(r.location || '').trim().toLowerCase() === loc.toLowerCase() &&
-           String(r.date || '').trim() === dt &&
-           String(r.subLocation || '').trim().toLowerCase() === subLoc.toLowerCase()
-  );
+  const matchedIndex = values.findIndex((row, index) => index > 0 &&
+    String(row[locIdx] || '').trim().toLowerCase() === loc.toLowerCase() &&
+    normalizeEventDate(row[dateIdx]) === dt &&
+    String(row[subLocIdx] || '').trim().toLowerCase() === subLoc.toLowerCase());
 
-  if (found && found.eventId) return String(found.eventId);
+  if (matchedIndex !== -1) {
+    if (statusIdx !== -1) eventsSheet.getRange(matchedIndex + 1, statusIdx + 1).setValue('live');
+    return String(values[matchedIndex][eventIdIdx] || '');
+  }
 
   const eventId = 'E-' + Date.now();
-  const values = eventsSheet.getDataRange().getValues();
-  const headers = values[0].map((h) => String(h || '').trim().toLowerCase());
-
   const newRow = new Array(headers.length).fill('');
   const setCell = (col, val) => {
     const idx = headers.indexOf(col.toLowerCase());
@@ -356,6 +377,7 @@ function createOrFindEvent(location, subLocation, date) {
   setCell('location', loc);
   setCell('sublocation', subLoc);
   setCell('date', dt);
+  setCell('status', 'live');
 
   eventsSheet.appendRow(newRow);
   return eventId;
@@ -368,53 +390,49 @@ function saveEventSummary(summaryData) {
   const date = String(summaryData.date || '').trim();
   const volunteers = String(summaryData.volunteers || '').trim();
   const interactions = String(summaryData.interactions || '').trim();
-  const duration = summaryData.duration === '' || summaryData.duration == null ? '' : Number(summaryData.duration);
+  const durationHours = summaryData.durationHours === '' || summaryData.durationHours == null ? '' : Number(summaryData.durationHours);
+  const booksDistributed = Number(summaryData.booksDistributed || 0);
   const appInstalls = Number(summaryData.appInstalls || 0);
 
   if (!location) throw new Error('Location is required.');
   if (!subLocation) throw new Error('Sub-location is required.');
   if (!date) throw new Error('Date is required.');
-  if (duration !== '' && (!Number.isFinite(duration) || duration < 0)) {
+  if (durationHours !== '' && (!Number.isFinite(durationHours) || durationHours < 0)) {
     throw new Error('Duration must be a non-negative number of hours.');
+  }
+  if (!Number.isInteger(booksDistributed) || booksDistributed < 0) {
+    throw new Error('Books distributed must be a non-negative whole number.');
   }
 
   const eventsSheet = getSheetByName(SHEET_NAMES.events);
   const values = eventsSheet.getDataRange().getValues();
 
   const headers = values[0].map((h) => String(h || '').trim().toLowerCase());
-  const eventIdIdx = headers.indexOf('eventid');
   const locIdx = headers.indexOf('location');
   const subLocIdx = headers.indexOf('sublocation');
   const dateIdx = headers.indexOf('date');
   const volIdx = headers.indexOf('volunteers');
   const intIdx = headers.indexOf('interactions');
-  const durIdx = headers.indexOf('duration');
+  const durationHoursIdx = headers.indexOf('durationhours');
+  const booksDistributedIdx = headers.indexOf('booksdistributed');
   const appIdx = headers.indexOf('appinstalls');
 
-  let matchedRowIndex = -1;
-  let existingEventId = '';
+  const matchedIndex = values.findIndex((row, index) => index > 0 &&
+    String(row[locIdx] || '').trim().toLowerCase() === location.toLowerCase() &&
+    String(row[subLocIdx] || '').trim().toLowerCase() === subLocation.toLowerCase() &&
+    normalizeEventDate(row[dateIdx]) === normalizeEventDate(date));
 
-  for (let i = 1; i < values.length; i++) {
-    const rowLoc = String(values[i][locIdx] || '').trim().toLowerCase();
-    const rowSub = String(values[i][subLocIdx] || '').trim().toLowerCase();
-    const rowDate = String(values[i][dateIdx] || '').trim();
-
-    if (rowLoc === location.toLowerCase() && rowSub === subLocation.toLowerCase() && rowDate === date) {
-      matchedRowIndex = i + 1;
-      existingEventId = String(values[i][eventIdIdx] || '');
-      break;
-    }
-  }
-
-  if (matchedRowIndex !== -1) {
+  if (matchedIndex !== -1) {
+    const matchedRowIndex = matchedIndex + 1;
     if (volIdx !== -1) eventsSheet.getRange(matchedRowIndex, volIdx + 1).setValue(volunteers);
     if (intIdx !== -1) eventsSheet.getRange(matchedRowIndex, intIdx + 1).setValue(interactions);
-    if (durIdx !== -1) eventsSheet.getRange(matchedRowIndex, durIdx + 1).setValue(duration);
+    if (durationHoursIdx !== -1) eventsSheet.getRange(matchedRowIndex, durationHoursIdx + 1).setValue(durationHours);
+    if (booksDistributedIdx !== -1) eventsSheet.getRange(matchedRowIndex, booksDistributedIdx + 1).setValue(booksDistributed);
     if (appIdx !== -1) eventsSheet.getRange(matchedRowIndex, appIdx + 1).setValue(appInstalls);
 
     return {
       success: true,
-      eventId: existingEventId,
+      eventId: String(values[matchedIndex][headers.indexOf('eventid')] || ''),
       message: `Updated stall event (${location} - ${subLocation} on ${date}).`
     };
   }
@@ -432,7 +450,8 @@ function saveEventSummary(summaryData) {
   setCell('date', date);
   setCell('volunteers', volunteers);
   setCell('interactions', interactions);
-  setCell('duration', duration);
+  setCell('durationhours', durationHours);
+  setCell('booksdistributed', booksDistributed);
   setCell('appinstalls', appInstalls);
 
   eventsSheet.appendRow(newRow);
@@ -688,6 +707,78 @@ function getTransactionsHistory(filters) {
   }
 
   return matched.reverse();
+}
+
+function getSalesPeriodSummary(startDate, endDate, sessionToken) {
+  const currentUser = validateSessionToken(sessionToken);
+  if (!currentUser) throw new Error('Your session has expired. Please log in with your PIN again.');
+  if (!currentUser.isAdmin) throw new Error('Only admins can view sales summaries.');
+
+  const start = String(startDate || '').trim();
+  const end = String(endDate || '').trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(start) || !/^\d{4}-\d{2}-\d{2}$/.test(end) || start > end) {
+    throw new Error('A valid summary date range is required.');
+  }
+
+  ensureSheetsExist();
+  const sales = getNormalizedSalesWithLocations();
+  const events = getAllRows(SHEET_NAMES.events);
+  const inRange = (date) => Boolean(date) && date >= start && date <= end;
+  const eventKeys = new Set();
+  const eventDateById = new Map();
+  const volunteers = new Map();
+  let totalBooks = 0;
+  let amountEarned = 0;
+
+  const addVolunteer = (name) => {
+    const cleanName = String(name || '').trim();
+    if (cleanName && !volunteers.has(cleanName.toLowerCase())) {
+      volunteers.set(cleanName.toLowerCase(), cleanName);
+    }
+  };
+
+  events.forEach((event) => {
+    let eventDate = '';
+    if (event.date instanceof Date && !isNaN(event.date.getTime())) {
+      eventDate = Utilities.formatDate(event.date, Session.getScriptTimeZone(), 'yyyy-MM-dd');
+    } else {
+      const eventDateText = String(event.date || '').trim();
+      const isoDate = eventDateText.match(/^\d{4}-\d{2}-\d{2}/);
+      if (isoDate) {
+        eventDate = isoDate[0];
+      } else if (eventDateText) {
+        const parsedDate = new Date(eventDateText);
+        if (!isNaN(parsedDate.getTime())) {
+          eventDate = Utilities.formatDate(parsedDate, Session.getScriptTimeZone(), 'yyyy-MM-dd');
+        }
+      }
+    }
+
+    const eventId = String(event.eventId || '').trim();
+    if (eventId && eventDate) eventDateById.set(eventId, eventDate);
+    if (!inRange(eventDate)) return;
+    const eventKey = eventId || [eventDate, event.location, event.subLocation].join('|');
+    eventKeys.add(eventKey);
+    String(event.volunteers || '').split(/[,;]|\s+and\s+/i).forEach(addVolunteer);
+  });
+
+  sales.forEach((sale) => {
+    const eventDate = eventDateById.get(String(sale.eventId || '').trim()) || sale.date;
+    if (!inRange(eventDate)) return;
+    const quantity = Number(sale.quantity || 0);
+    const unitPrice = Number(sale.unitPrice || 0);
+    totalBooks += Number.isFinite(quantity) ? quantity : 0;
+    amountEarned += Number.isFinite(quantity * unitPrice) ? quantity * unitPrice : 0;
+  });
+
+  return {
+    startDate: start,
+    endDate: end,
+    totalBooks: totalBooks,
+    amountEarned: amountEarned,
+    eventCount: eventKeys.size,
+    volunteerCount: volunteers.size
+  };
 }
 
 function getInventory(stockOwnerFilter, statusFilter) {
