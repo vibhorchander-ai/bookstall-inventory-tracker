@@ -80,6 +80,20 @@
         float: right;
       }
       .btn-logout:hover { color: var(--red); border-color: var(--red); }
+      .btn-change-pin {
+        align-self: flex-start;
+        height: 28px;
+        margin-top: 6px;
+        padding: 0 8px;
+        border: 1px solid #cbd5e1;
+        border-radius: 6px;
+        background: transparent;
+        color: var(--muted);
+        font-size: 11px;
+        font-weight: 700;
+        cursor: pointer;
+      }
+      .btn-change-pin:hover { color: var(--text); border-color: var(--text); }
 
       .nav { display: flex; flex-direction: column; gap: 6px; flex: 1; }
       .nav-btn {
@@ -493,6 +507,28 @@
       </div>
     </div>
 
+    <div id="changePinModal" class="login-modal-overlay" style="display: none;">
+      <div class="login-card" style="text-align: left;">
+        <h2>Change PIN</h2>
+        <div class="field">
+          <label for="currentPinInput">Current PIN</label>
+          <input id="currentPinInput" type="password" inputmode="numeric" maxlength="6" autocomplete="current-password" />
+        </div>
+        <div class="field">
+          <label for="newPinInput">New PIN (4-6 digits)</label>
+          <input id="newPinInput" type="password" inputmode="numeric" maxlength="6" autocomplete="new-password" />
+        </div>
+        <div class="field">
+          <label for="confirmNewPinInput">Confirm new PIN</label>
+          <input id="confirmNewPinInput" type="password" inputmode="numeric" maxlength="6" autocomplete="new-password" />
+        </div>
+        <div style="display: flex; justify-content: flex-end; gap: 8px;">
+          <button type="button" id="btnCancelPinChange" class="target-save-btn">Cancel</button>
+          <button type="button" id="btnSubmitPinChange" class="btn-primary">Update PIN</button>
+        </div>
+      </div>
+    </div>
+
     <!-- MAIN APP SHELL -->
     <div class="app-shell">
       <aside class="sidebar">
@@ -507,8 +543,8 @@
         <div class="user-badge">
           <button type="button" class="btn-logout" id="btnLogout" title="Log out on this device">Logout</button>
           <div style="font-weight: 700; font-size: 14px;" id="lblUserName">—</div>
-          <div style="font-size: 11px; color: var(--muted); word-break: break-all;" id="lblUserEmail">—</div>
           <div id="lblUserRole" class="role-tag">Volunteer</div>
+          <button type="button" id="btnChangePin" class="btn-change-pin">Change PIN</button>
         </div>
 
         <nav class="nav">
@@ -517,7 +553,7 @@
           <button class="nav-btn" data-page="page-prices"><span>🏷️</span> Price Insights</button>
           <button class="nav-btn" data-page="page-targets"><span>🎯</span> Location Targets</button>
           <button class="nav-btn" data-page="page-history"><span>🕒</span> History & Audit</button>
-          <button class="nav-btn" data-page="page-stock"><span>📦</span> Add Stock</button>
+          <button class="nav-btn" data-page="page-stock"><span>📦</span> Manage Stock</button>
           <button class="nav-btn" data-page="page-inventory"><span>📊</span> Inventory</button>
           <button class="nav-btn admin-only" data-page="page-users"><span>👥</span> Volunteers</button>
         </nav>
@@ -552,15 +588,9 @@
               </div>
             </div>
 
-            <div class="grid-2">
-              <div class="field">
-                <label>Sold By (Volunteer) *</label>
-                <select id="saleVolunteer"></select>
-              </div>
-              <div class="field">
-                <label>Stock Owner (Optional attribution)</label>
-                <select id="saleStockOwner"></select>
-              </div>
+            <div class="field">
+              <label>Sold By (Volunteer) *</label>
+              <select id="saleVolunteer"></select>
             </div>
 
             <div class="items-container">
@@ -774,17 +804,25 @@
           <div class="panel" style="max-width: 760px;">
             <div class="section-header">
               <div>
-                <h1>Allocate Stock (Secondary)</h1>
-                <p>Assign books to volunteer inventory via single title entry or bulk paste with discrepancy matching.</p>
+                <h1>Manage Inventory</h1>
+                <p>Add or remove copies from a volunteer's inventory.</p>
               </div>
             </div>
 
-            <div class="tab-bar">
-              <button type="button" class="tab-btn active" id="tabBtnSingleStock">Single Title Entry</button>
-              <button type="button" class="tab-btn" id="tabBtnBulkStock">Bulk Stock Paste</button>
+            <div class="field">
+              <label>Stock Change</label>
+              <select id="stockAdjustmentType">
+                <option value="add">Add to inventory</option>
+                <option value="remove">Remove from inventory</option>
+              </select>
             </div>
 
-            <div class="field">
+            <div class="tab-bar">
+              <button type="button" class="tab-btn active" id="tabBtnSingleStock">Single Title</button>
+              <button type="button" class="tab-btn" id="tabBtnBulkStock">Bulk Titles</button>
+            </div>
+
+            <div id="addStockOwnerField" class="field admin-only">
               <label>Assign to Volunteer *</label>
               <select id="addStockOwner"></select>
             </div>
@@ -799,10 +837,10 @@
                 </div>
               </div>
               <div class="field">
-                <label>Quantity Received *</label>
+                <label>Quantity *</label>
                 <input id="singleStockQty" type="number" min="1" value="10" />
               </div>
-              <button class="btn-primary" id="btnSubmitSingleStock" type="button" style="width: 100%;">📦 Add Single Title to Stock</button>
+              <button class="btn-primary" id="btnSubmitSingleStock" type="button" style="width: 100%;">Apply Stock Change</button>
             </div>
 
             <!-- MODE 2: Bulk Paste with Discrepancy Matching -->
@@ -904,12 +942,7 @@
               </div>
             </div>
 
-            <div class="grid-2">
-              <div class="field">
-                <label>Initial 4-Digit PIN *</label>
-                <input id="newVolPin" type="text" maxlength="6" value="1234" placeholder="e.g. 1008" />
-              </div>
-            </div>
+            <p style="font-size: 12px; color: var(--muted);">New volunteers start with PIN 1234 and can change it after signing in.</p>
 
             <div style="display: flex; justify-content: flex-end;">
               <button class="btn-primary" id="btnAddVolunteerSubmit" type="button">➕ Register Volunteer</button>
@@ -920,7 +953,7 @@
             <div class="section-header">
               <div>
                 <h1>Volunteer Permissions</h1>
-                <p>Manage volunteer roles, active status, and PINs.</p>
+                <p>Manage volunteer roles and active status.</p>
               </div>
             </div>
 
@@ -932,7 +965,6 @@
                     <th style="min-width: 140px;">Name</th>
                     <th style="min-width: 180px;">Email</th>
                     <th style="width: 140px;">Role</th>
-                    <th style="width: 100px;">PIN</th>
                     <th style="width: 100px;">Status</th>
                     <th style="width: 110px;">Actions</th>
                   </tr>
@@ -961,8 +993,41 @@
       let allSalesRecords = null;
       const DATA_CACHE_TTL_MS = 2 * 60 * 1000;
       const dataCache = new Map();
-      const SESSION_STORAGE_KEY = 'cc_stall_user_session_token';
+      const SESSION_STORAGE_KEY = 'cc_stall_user_sessions';
+      const ACTIVE_SESSION_USER_KEY = 'cc_stall_active_session_user';
+      const LEGACY_SESSION_STORAGE_KEY = 'cc_stall_user_session_token';
       const LAST_SALE_LOCATION_KEY = 'cc_stall_last_sale_location';
+
+      function getStoredSessions() {
+        try {
+          return JSON.parse(localStorage.getItem(SESSION_STORAGE_KEY) || '{}');
+        } catch (e) {
+          return {};
+        }
+      }
+
+      function getSessionToken() {
+        const activeUserId = localStorage.getItem(ACTIVE_SESSION_USER_KEY);
+        const sessions = getStoredSessions();
+        return (activeUserId && sessions[activeUserId]) || localStorage.getItem(LEGACY_SESSION_STORAGE_KEY) || '';
+      }
+
+      function storeSessionToken(token, volunteerId) {
+        const sessions = getStoredSessions();
+        sessions[String(volunteerId)] = token;
+        localStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(sessions));
+        localStorage.setItem(ACTIVE_SESSION_USER_KEY, String(volunteerId));
+        localStorage.removeItem(LEGACY_SESSION_STORAGE_KEY);
+      }
+
+      function clearActiveSession() {
+        const activeUserId = localStorage.getItem(ACTIVE_SESSION_USER_KEY);
+        const sessions = getStoredSessions();
+        if (activeUserId) delete sessions[activeUserId];
+        localStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(sessions));
+        localStorage.removeItem(ACTIVE_SESSION_USER_KEY);
+        localStorage.removeItem(LEGACY_SESSION_STORAGE_KEY);
+      }
 
       function getCachedData(key) {
         const entry = dataCache.get(key);
@@ -1029,7 +1094,7 @@
             rangeLabel.textContent = 'Could not load sales overview.';
             showToast('Failed to load sales overview: ' + err.message, false);
           })
-          .getSalesPeriodSummary(range.startDate, range.endDate, localStorage.getItem(SESSION_STORAGE_KEY));
+          .getSalesPeriodSummary(range.startDate, range.endDate, getSessionToken());
       }
 
       function renderSalesSummary(summary) {
@@ -1087,7 +1152,7 @@
 
         bindEventListeners();
 
-        const existingToken = localStorage.getItem(SESSION_STORAGE_KEY);
+        const existingToken = getSessionToken();
         if (existingToken) {
           loadAppDataWithToken(existingToken);
         } else {
@@ -1117,10 +1182,11 @@
         google.script.run
           .withSuccessHandler((res) => {
             if (!res.currentUser) {
-              localStorage.removeItem(SESSION_STORAGE_KEY);
+              clearActiveSession();
               showLoginModal();
               return;
             }
+            storeSessionToken(token, res.currentUser.volunteerId);
             document.getElementById('loginModal').style.display = 'none';
             onLookupLoaded(res);
           })
@@ -1136,7 +1202,6 @@
         const u = res.currentUser;
 
         document.getElementById('lblUserName').textContent = u.name;
-        document.getElementById('lblUserEmail').textContent = u.email || '';
         document.getElementById('lblUserRole').textContent = u.isAdmin ? 'Admin' : 'Volunteer';
         document.getElementById('salesSummarySection').style.display = u.isAdmin ? 'block' : 'none';
 
@@ -1187,13 +1252,13 @@
           }
         });
 
-        const volSelects = ['saleVolunteer', 'saleStockOwner', 'addStockOwner', 'invOwnerFilter', 'histRecordedByFilter'];
+        const volSelects = ['saleVolunteer', 'addStockOwner', 'invOwnerFilter', 'histRecordedByFilter'];
         volSelects.forEach((id) => {
           const el = document.getElementById(id);
           if (!el) return;
           const isFilter = id.includes('Filter');
-          const isOptional = id === 'saleStockOwner';
-          el.innerHTML = isFilter ? '<option value="">All Volunteers</option>' : (isOptional ? '<option value="">None / Direct</option>' : '');
+          const isStockOwner = id === 'addStockOwner';
+          el.innerHTML = isFilter ? '<option value="">All Volunteers</option>' : (isStockOwner ? '<option value="">-- Choose Volunteer --</option>' : '');
 
           appData.volunteers.forEach((v) => {
             const opt = document.createElement('option');
@@ -1501,7 +1566,7 @@ ${bookListStr}`;
           .withSuccessHandler((res) => {
             showToast(res.message);
             invalidateCachedData('salesSummary:');
-            google.script.run.withSuccessHandler(onLookupLoaded).getLookupData(localStorage.getItem(SESSION_STORAGE_KEY));
+            google.script.run.withSuccessHandler(onLookupLoaded).getLookupData(getSessionToken());
           })
           .withFailureHandler((err) => showToast(err.message, false))
           .saveEventSummary({
@@ -1764,7 +1829,7 @@ ${bookListStr}`;
             setCachedData(cacheKey, rows);
             renderInventoryTable();
           })
-          .getInventory(owner, status);
+          .getInventory(owner, status, getSessionToken());
       }
 
       function renderInventoryTable() {
@@ -1804,7 +1869,6 @@ ${bookListStr}`;
                 <option value="admin" ${currentRole === 'admin' ? 'selected' : ''}>Admin</option>
               </select>
             </td>
-            <td><code>${v.pin || '—'}</code></td>
             <td><span class="badge ${isActive ? 'badge-green' : 'badge-red'}">${isActive ? 'Active' : 'Inactive'}</span></td>
             <td>
               <button style="border: 1px solid var(--line); border-radius: 6px; padding: 4px 8px; cursor: pointer; background: #fff;" onclick="toggleVolunteer('${v.volunteerId}', ${!isActive})">
@@ -1820,7 +1884,7 @@ ${bookListStr}`;
         google.script.run
           .withSuccessHandler((res) => {
             showToast(res.message);
-            google.script.run.withSuccessHandler(onLookupLoaded).getLookupData(localStorage.getItem(SESSION_STORAGE_KEY));
+            google.script.run.withSuccessHandler(onLookupLoaded).getLookupData(getSessionToken());
           })
           .updateVolunteerRole(volId, newRole);
       }
@@ -1829,7 +1893,7 @@ ${bookListStr}`;
         google.script.run
           .withSuccessHandler((res) => {
             showToast(res.message);
-            google.script.run.withSuccessHandler(onLookupLoaded).getLookupData(localStorage.getItem(SESSION_STORAGE_KEY));
+            google.script.run.withSuccessHandler(onLookupLoaded).getLookupData(getSessionToken());
           })
           .toggleVolunteerStatus(volId, makeActive);
       }
@@ -1870,7 +1934,7 @@ ${bookListStr}`;
           google.script.run
             .withSuccessHandler((res) => {
               if (res.success) {
-                localStorage.setItem(SESSION_STORAGE_KEY, res.token);
+                storeSessionToken(res.token, res.currentUser.volunteerId);
                 document.getElementById('loginModal').style.display = 'none';
                 loadAppDataWithToken(res.token);
                 showToast(`Welcome back, ${res.currentUser.name}!`);
@@ -1885,8 +1949,16 @@ ${bookListStr}`;
         // Logout
         document.getElementById('btnLogout').addEventListener('click', () => {
           if (confirm('Log out of this device? You will need your PIN to log back in.')) {
-            localStorage.removeItem(SESSION_STORAGE_KEY);
-            location.reload();
+            const token = getSessionToken();
+            clearActiveSession();
+            if (!token) {
+              location.reload();
+              return;
+            }
+            google.script.run
+              .withSuccessHandler(() => location.reload())
+              .withFailureHandler(() => location.reload())
+              .revokeSessionToken(token);
           }
         });
 
@@ -1896,7 +1968,6 @@ ${bookListStr}`;
           const subLoc = document.getElementById('saleSubLocation').value.trim();
           const date = document.getElementById('saleDate').value.trim();
           const seller = document.getElementById('saleVolunteer').value.trim();
-          const stockOwner = document.getElementById('saleStockOwner').value.trim();
           const notes = document.getElementById('saleNotes').value.trim();
 
           if (!loc) { showToast('Please select a Major Location.', false); return; }
@@ -1925,12 +1996,11 @@ ${bookListStr}`;
             subLocation: subLoc,
             eventDate: date,
             sellerName: seller,
-            stockOwnerName: stockOwner,
             notes: notes,
             items: items
           };
 
-          const token = localStorage.getItem(SESSION_STORAGE_KEY);
+          const token = getSessionToken();
           showToast('Saving sale...');
           google.script.run
             .withSuccessHandler((res) => {
@@ -1964,7 +2034,7 @@ ${bookListStr}`;
           google.script.run
             .withSuccessHandler((res) => {
               showToast(res.message);
-              google.script.run.withSuccessHandler(onLookupLoaded).getLookupData(localStorage.getItem(SESSION_STORAGE_KEY));
+              google.script.run.withSuccessHandler(onLookupLoaded).getLookupData(getSessionToken());
             })
             .withFailureHandler((err) => showToast(err.message, false))
             .addNewLocation(locName.trim(), target);
@@ -1975,11 +2045,9 @@ ${bookListStr}`;
           const name = document.getElementById('newVolName').value.trim();
           const email = document.getElementById('newVolEmail').value.trim();
           const role = document.getElementById('newVolRole').value;
-          const pin = document.getElementById('newVolPin').value.trim();
 
           if (!name) { showToast('Please enter Volunteer Name.', false); return; }
           if (!email || !email.includes('@')) { showToast('Please enter a valid Gmail address.', false); return; }
-          if (!pin) { showToast('Please set an initial PIN.', false); return; }
 
           showToast('Registering volunteer...');
           google.script.run
@@ -1987,10 +2055,43 @@ ${bookListStr}`;
               showToast(res.message);
               document.getElementById('newVolName').value = '';
               document.getElementById('newVolEmail').value = '';
-              google.script.run.withSuccessHandler(onLookupLoaded).getLookupData(localStorage.getItem(SESSION_STORAGE_KEY));
+              google.script.run.withSuccessHandler(onLookupLoaded).getLookupData(getSessionToken());
             })
             .withFailureHandler((err) => showToast(err.message, false))
-            .addVolunteer({ name: name, email: email, role: role, pin: pin });
+            .addVolunteer({ name: name, email: email, role: role }, getSessionToken());
+        });
+
+        document.getElementById('btnChangePin').addEventListener('click', () => {
+          document.getElementById('currentPinInput').value = '';
+          document.getElementById('newPinInput').value = '';
+          document.getElementById('confirmNewPinInput').value = '';
+          document.getElementById('changePinModal').style.display = 'flex';
+        });
+        document.getElementById('btnCancelPinChange').addEventListener('click', () => {
+          document.getElementById('changePinModal').style.display = 'none';
+        });
+        document.getElementById('btnSubmitPinChange').addEventListener('click', (event) => {
+          const currentPin = document.getElementById('currentPinInput').value.trim();
+          const newPin = document.getElementById('newPinInput').value.trim();
+          const confirmPin = document.getElementById('confirmNewPinInput').value.trim();
+          if (!currentPin) { showToast('Enter your current PIN.', false); return; }
+          if (!/^\d{4,6}$/.test(newPin)) { showToast('New PIN must be 4 to 6 digits.', false); return; }
+          if (newPin !== confirmPin) { showToast('New PIN entries do not match.', false); return; }
+
+          const button = event.currentTarget;
+          button.disabled = true;
+          google.script.run
+            .withSuccessHandler((res) => {
+              storeSessionToken(res.token, appData.currentUser.volunteerId);
+              document.getElementById('changePinModal').style.display = 'none';
+              button.disabled = false;
+              showToast(res.message);
+            })
+            .withFailureHandler((err) => {
+              button.disabled = false;
+              showToast(err.message, false);
+            })
+            .updateOwnVolunteerPin(currentPin, newPin, getSessionToken());
         });
 
         // Summary Actions
@@ -2021,15 +2122,18 @@ ${bookListStr}`;
 
         // Submit Single Title Stock
         document.getElementById('btnSubmitSingleStock').addEventListener('click', () => {
-          const vol = document.getElementById('addStockOwner').value;
+          const vol = appData.currentUser.isAdmin
+            ? document.getElementById('addStockOwner').value
+            : appData.currentUser.name;
           const book = document.getElementById('singleStockBookInput').value.trim();
           const qty = parseInt(document.getElementById('singleStockQty').value, 10);
+          const adjustment = document.getElementById('stockAdjustmentType').value;
 
           if (!vol) { showToast('Please select a volunteer.', false); return; }
           if (!book) { showToast('Please select a book title.', false); return; }
           if (isNaN(qty) || qty <= 0) { showToast('Please enter a valid quantity.', false); return; }
 
-          showToast('Allocating stock...');
+          showToast(adjustment === 'add' ? 'Adding to inventory...' : 'Removing from inventory...');
           google.script.run
             .withSuccessHandler((res) => {
               showToast(res.message);
@@ -2038,7 +2142,7 @@ ${bookListStr}`;
               loadInventory();
             })
             .withFailureHandler((err) => showToast(err.message, false))
-            .commitStockAllocation([{ bookName: book, quantity: qty }], vol);
+            .adjustInventory([{ bookName: book, quantity: qty }], vol, adjustment, getSessionToken());
         });
 
         // Bulk Preview & Discrepancy Matching
@@ -2057,7 +2161,10 @@ ${bookListStr}`;
 
         // Confirm Bulk Allocation
         document.getElementById('btnConfirmBulkStock').addEventListener('click', () => {
-          const vol = document.getElementById('addStockOwner').value;
+          const vol = appData.currentUser.isAdmin
+            ? document.getElementById('addStockOwner').value
+            : appData.currentUser.name;
+          const adjustment = document.getElementById('stockAdjustmentType').value;
           if (!vol) { showToast('Please select a volunteer.', false); return; }
 
           const finalItems = [];
@@ -2079,7 +2186,7 @@ ${bookListStr}`;
             return;
           }
 
-          showToast('Committing stock to spreadsheet...');
+          showToast(adjustment === 'add' ? 'Adding to inventory...' : 'Removing from inventory...');
           google.script.run
             .withSuccessHandler((res) => {
               showToast(res.message);
@@ -2089,7 +2196,7 @@ ${bookListStr}`;
               loadInventory();
             })
             .withFailureHandler((err) => showToast(err.message, false))
-            .commitStockAllocation(finalItems, vol);
+            .adjustInventory(finalItems, vol, adjustment, getSessionToken());
         });
 
         // History Filters
@@ -2134,7 +2241,7 @@ ${bookListStr}`;
               button.textContent = 'Save Target';
               showToast(err.message, false);
             })
-            .updateLocationTarget(card.dataset.locationId, target, localStorage.getItem(SESSION_STORAGE_KEY));
+            .updateLocationTarget(card.dataset.locationId, target, getSessionToken());
         });
         document.getElementById('invOwnerFilter').addEventListener('change', loadInventory);
         document.getElementById('invStatusFilter').addEventListener('change', loadInventory);

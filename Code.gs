@@ -13,6 +13,8 @@ const SHEET_NAMES = {
   stock: 'Stock',
   sales: 'Sales'
 };
+const SESSION_TOKEN_PROPERTY_PREFIX = 'bookstall_session_';
+const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 
 function getSheetByName(sheetName) {
   const spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
@@ -121,6 +123,31 @@ function getVolunteersForLogin() {
     .sort((a, b) => a.name.localeCompare(b.name));
 }
 
+function createSessionToken(volunteerId) {
+  const properties = PropertiesService.getScriptProperties();
+  const now = Date.now();
+  Object.entries(properties.getProperties()).forEach(([key, value]) => {
+    if (!key.startsWith(SESSION_TOKEN_PROPERTY_PREFIX)) return;
+    try {
+      const session = JSON.parse(value);
+      if (!Number.isFinite(session.expiresAt) || session.expiresAt <= now) properties.deleteProperty(key);
+    } catch (e) {
+      properties.deleteProperty(key);
+    }
+  });
+
+  const token = Utilities.getUuid();
+  const session = {
+    volunteerId: String(volunteerId),
+    expiresAt: now + SESSION_TTL_MS
+  };
+  properties.setProperty(
+    SESSION_TOKEN_PROPERTY_PREFIX + token,
+    JSON.stringify(session)
+  );
+  return token;
+}
+
 function verifyVolunteerPin(volunteerId, inputPin) {
   ensureSheetsExist();
   const rows = getAllRows(SHEET_NAMES.volunteers);
@@ -141,13 +168,13 @@ function verifyVolunteerPin(volunteerId, inputPin) {
   const storedPin = String(user.pin !== undefined && user.pin !== null ? user.pin : '').trim();
 
   if (!storedPin) {
-    updateVolunteerPinInSheet(targetId, pinEntered);
+    updateVolunteerPinInSheet_(targetId, pinEntered);
   } else if (storedPin !== pinEntered) {
     return { success: false, message: 'Incorrect PIN. Please try again.' };
   }
 
   const role = String(user.role || 'user').trim().toLowerCase();
-  const token = Utilities.base64Encode(targetId + '::' + pinEntered + '::' + Date.now());
+  const token = createSessionToken(targetId);
 
   return {
     success: true,
@@ -164,24 +191,43 @@ function verifyVolunteerPin(volunteerId, inputPin) {
 
 function validateSessionToken(token) {
   if (!token) return null;
-  try {
-    const decoded = Utilities.newBlob(Utilities.base64Decode(token)).getDataAsString();
-    const parts = decoded.split('::');
-    if (parts.length < 2) return null;
+  const properties = PropertiesService.getScriptProperties();
+  let serializedSession = properties.getProperty(SESSION_TOKEN_PROPERTY_PREFIX + token);
 
-    const volunteerId = parts[0];
-    const pin = parts[1];
+  if (!serializedSession) {
+    try {
+      const decoded = Utilities.newBlob(Utilities.base64Decode(token)).getDataAsString();
+      const parts = decoded.split('::');
+      if (parts.length < 3) return null;
+
+      const issuedAt = Number(parts[2]);
+      if (!Number.isFinite(issuedAt) || Date.now() - issuedAt > SESSION_TTL_MS || issuedAt > Date.now()) return null;
+
+      const legacyRows = getAllRows(SHEET_NAMES.volunteers);
+      const legacyUser = legacyRows.find((row) => String(row.volunteerId || '').trim() === parts[0]);
+      if (!legacyUser || String(legacyUser.pin || '').trim() !== parts[1]) return null;
+
+      serializedSession = JSON.stringify({ volunteerId: parts[0], expiresAt: issuedAt + SESSION_TTL_MS });
+      properties.setProperty(SESSION_TOKEN_PROPERTY_PREFIX + token, serializedSession);
+    } catch (e) {
+      return null;
+    }
+  }
+
+  try {
+    const session = JSON.parse(serializedSession);
+    if (!session.volunteerId || !Number.isFinite(session.expiresAt) || Date.now() >= session.expiresAt) {
+      properties.deleteProperty(SESSION_TOKEN_PROPERTY_PREFIX + token);
+      return null;
+    }
 
     const rows = getAllRows(SHEET_NAMES.volunteers);
-    const user = rows.find((v) => String(v.volunteerId || '').trim() === volunteerId);
+    const user = rows.find((v) => String(v.volunteerId || '').trim() === String(session.volunteerId));
 
     if (!user) return null;
 
     const actVal = String(user.active ?? 'true').trim().toLowerCase();
     if (['0', 'false', 'no', 'inactive'].includes(actVal)) return null;
-
-    const storedPin = String(user.pin !== undefined && user.pin !== null ? user.pin : '').trim();
-    if (storedPin !== pin) return null;
 
     const role = String(user.role || 'user').trim().toLowerCase();
     return {
@@ -196,7 +242,14 @@ function validateSessionToken(token) {
   }
 }
 
-function updateVolunteerPinInSheet(volunteerId, newPin) {
+function revokeSessionToken(sessionToken) {
+  if (sessionToken) {
+    PropertiesService.getScriptProperties().deleteProperty(SESSION_TOKEN_PROPERTY_PREFIX + String(sessionToken));
+  }
+  return { success: true };
+}
+
+function updateVolunteerPinInSheet_(volunteerId, newPin) {
   const sheet = getSheetByName(SHEET_NAMES.volunteers);
   const data = sheet.getDataRange().getValues();
   const headers = data[0].map((h) => String(h || '').trim().toLowerCase());
@@ -286,7 +339,6 @@ function getLookupData(sessionToken) {
     name: String(v.name || ''),
     email: String(v.email || ''),
     role: String(v.role || 'user').toLowerCase(),
-    pin: String(v.pin || ''),
     active: !['0', 'false', 'no', 'inactive'].includes(String(v.active ?? 'true').trim().toLowerCase())
   }));
 
@@ -416,6 +468,7 @@ function saveEventSummary(summaryData) {
   const durationHoursIdx = headers.indexOf('durationhours');
   const booksDistributedIdx = headers.indexOf('booksdistributed');
   const appIdx = headers.indexOf('appinstalls');
+  const statusIdx = headers.indexOf('status');
 
   const matchedIndex = values.findIndex((row, index) => index > 0 &&
     String(row[locIdx] || '').trim().toLowerCase() === location.toLowerCase() &&
@@ -429,6 +482,7 @@ function saveEventSummary(summaryData) {
     if (durationHoursIdx !== -1) eventsSheet.getRange(matchedRowIndex, durationHoursIdx + 1).setValue(durationHours);
     if (booksDistributedIdx !== -1) eventsSheet.getRange(matchedRowIndex, booksDistributedIdx + 1).setValue(booksDistributed);
     if (appIdx !== -1) eventsSheet.getRange(matchedRowIndex, appIdx + 1).setValue(appInstalls);
+    if (statusIdx !== -1) eventsSheet.getRange(matchedRowIndex, statusIdx + 1).setValue('completed');
 
     return {
       success: true,
@@ -453,6 +507,7 @@ function saveEventSummary(summaryData) {
   setCell('durationhours', durationHours);
   setCell('booksdistributed', booksDistributed);
   setCell('appinstalls', appInstalls);
+  setCell('status', 'completed');
 
   eventsSheet.appendRow(newRow);
   return { success: true, eventId: eventId, message: `Created new event for ${location} - ${subLocation}.` };
@@ -474,7 +529,6 @@ function recordMultiItemSale(payload, sessionToken) {
   const subLocation = String(payload.subLocation || '').trim();
   const date = String(payload.eventDate || '').trim();
   const seller = String(payload.sellerName || '').trim();
-  const stockOwner = String(payload.stockOwnerName || '').trim();
   const recordedBy = currentUser.name;
   const notes = String(payload.notes || '').trim();
 
@@ -521,7 +575,6 @@ function recordMultiItemSale(payload, sessionToken) {
     setCell('location', location);
     setCell('sublocation', subLocation);
     setCell('sellername', seller);
-    setCell('stockownername', stockOwner);
     setCell('quantity', qty);
     setCell('unitprice', price);
     setCell('recordedby', recordedBy);
@@ -781,7 +834,11 @@ function getSalesPeriodSummary(startDate, endDate, sessionToken) {
   };
 }
 
-function getInventory(stockOwnerFilter, statusFilter) {
+function getInventory(stockOwnerFilter, statusFilter, sessionToken) {
+  if (!validateSessionToken(sessionToken)) {
+    throw new Error('Your session has expired. Please log in with your PIN again.');
+  }
+
   ensureSheetsExist();
   const stockRows = getAllRows(SHEET_NAMES.stock);
   const normalizedOwner = String(stockOwnerFilter || '').trim().toLowerCase();
@@ -823,61 +880,121 @@ function getInventory(stockOwnerFilter, statusFilter) {
   return results.sort((a, b) => a.bookName.localeCompare(b.bookName));
 }
 
-function commitStockAllocation(itemsArray, volunteerName) {
+function adjustInventory(itemsArray, requestedVolunteerName, adjustmentType, sessionToken) {
+  const currentUser = validateSessionToken(sessionToken);
+  if (!currentUser) throw new Error('Your session has expired. Please log in with your PIN again.');
+
   ensureSheetsExist();
-  const targetVolunteer = String(volunteerName || '').trim();
-  if (!targetVolunteer) throw new Error('Please select a volunteer to assign the stock to.');
-  if (!itemsArray || !Array.isArray(itemsArray) || itemsArray.length === 0) throw new Error('No items to allocate.');
+  const targetVolunteer = currentUser.isAdmin
+    ? String(requestedVolunteerName || '').trim()
+    : currentUser.name.trim();
+  const operation = String(adjustmentType || '').trim().toLowerCase();
+  if (!targetVolunteer) throw new Error('Please select a volunteer to manage stock for.');
+  if (!['add', 'remove'].includes(operation)) throw new Error('Choose whether to add or remove stock.');
+  if (!itemsArray || !Array.isArray(itemsArray) || itemsArray.length === 0) throw new Error('No stock changes to apply.');
+
+  if (currentUser.isAdmin) {
+    const activeVolunteers = getAllRows(SHEET_NAMES.volunteers).filter((volunteer) => {
+      const active = String(volunteer.active ?? 'true').trim().toLowerCase();
+      return !['0', 'false', 'no', 'inactive'].includes(active);
+    });
+    if (!activeVolunteers.some((volunteer) => String(volunteer.name || '').trim().toLowerCase() === targetVolunteer.toLowerCase())) {
+      throw new Error('Select an active volunteer.');
+    }
+  }
+
+  const quantitiesByBook = new Map();
+  itemsArray.forEach((item) => {
+    const book = String(item.bookName || '').trim();
+    const quantity = Number(item.quantity);
+    if (!book || !Number.isInteger(quantity) || quantity <= 0) {
+      throw new Error('Each stock change needs a book and a positive whole-number quantity.');
+    }
+    const key = book.toLowerCase();
+    const current = quantitiesByBook.get(key);
+    quantitiesByBook.set(key, {
+      bookName: current ? current.bookName : book,
+      quantity: (current ? current.quantity : 0) + quantity
+    });
+  });
 
   const stockSheet = getSheetByName(SHEET_NAMES.stock);
   const values = stockSheet.getDataRange().getValues();
-  const headers = values[0].map((h) => String(h || '').trim().toLowerCase());
-
+  const headers = values[0].map((header) => String(header || '').trim().toLowerCase());
   const bookIdx = headers.indexOf('bookname');
   const ownerIdx = headers.indexOf('volunteername');
   const recIdx = headers.indexOf('quantityreceived');
   const remIdx = headers.indexOf('quantityremaining');
+  const stockIdIdx = headers.indexOf('stockid');
+  if ([bookIdx, ownerIdx, recIdx, remIdx].some((index) => index === -1)) {
+    throw new Error('Inventory columns were not found.');
+  }
 
-  let addedCount = 0;
+  const plannedUpdates = [];
+  const rowsToAdd = [];
   let totalUnits = 0;
-
-  itemsArray.forEach((item) => {
-    const book = String(item.bookName || '').trim();
-    const qty = Number(item.quantity);
-    if (!book || !Number.isInteger(qty) || qty <= 0) return;
-
-    let matched = false;
-    for (let i = 1; i < values.length; i++) {
+  quantitiesByBook.forEach(({ bookName, quantity }) => {
+    const matchingRows = [];
+    for (let index = 1; index < values.length; index++) {
       if (
-        String(values[i][bookIdx] || '').trim().toLowerCase() === book.toLowerCase() &&
-        String(values[i][ownerIdx] || '').trim().toLowerCase() === targetVolunteer.toLowerCase()
+        String(values[index][bookIdx] || '').trim().toLowerCase() === bookName.toLowerCase() &&
+        String(values[index][ownerIdx] || '').trim().toLowerCase() === targetVolunteer.toLowerCase()
       ) {
-        const curRec = Number(values[i][recIdx] ?? 0);
-        const curRem = Number((remIdx !== -1 ? values[i][remIdx] : values[i][recIdx]) ?? 0);
-        stockSheet.getRange(i + 1, recIdx + 1).setValue(curRec + qty);
-        if (remIdx !== -1) stockSheet.getRange(i + 1, remIdx + 1).setValue(curRem + qty);
-        matched = true;
-        break;
+        matchingRows.push(index);
       }
     }
 
-    if (!matched) {
-      const newRow = Array(headers.length).fill('');
-      newRow[bookIdx] = book;
-      newRow[ownerIdx] = targetVolunteer;
-      newRow[recIdx] = qty;
-      if (remIdx !== -1) newRow[remIdx] = qty;
-      stockSheet.appendRow(newRow);
+    if (operation === 'add') {
+      if (matchingRows.length) {
+        const index = matchingRows[0];
+        plannedUpdates.push({
+          rowNumber: index + 1,
+          quantityReceived: Number(values[index][recIdx] || 0) + quantity,
+          quantityRemaining: Number(values[index][remIdx] || 0) + quantity
+        });
+      } else {
+        const newRow = new Array(headers.length).fill('');
+        if (stockIdIdx !== -1) newRow[stockIdIdx] = 'STK-' + Date.now() + '-' + rowsToAdd.length;
+        newRow[bookIdx] = bookName;
+        newRow[ownerIdx] = targetVolunteer;
+        newRow[recIdx] = quantity;
+        newRow[remIdx] = quantity;
+        rowsToAdd.push(newRow);
+      }
+      totalUnits += quantity;
+      return;
     }
-    addedCount++;
-    totalUnits += qty;
+
+    const available = matchingRows.reduce((sum, index) => sum + Number(values[index][remIdx] || 0), 0);
+    if (available < quantity) {
+      throw new Error(`${bookName} has only ${available} copies available for ${targetVolunteer}.`);
+    }
+
+    let remainingToRemove = quantity;
+    matchingRows.forEach((index) => {
+      if (remainingToRemove <= 0) return;
+      const currentRemaining = Number(values[index][remIdx] || 0);
+      const removed = Math.min(currentRemaining, remainingToRemove);
+      plannedUpdates.push({ rowNumber: index + 1, quantityRemaining: currentRemaining - removed });
+      remainingToRemove -= removed;
+    });
+    totalUnits += quantity;
   });
+
+  plannedUpdates.forEach((update) => {
+    if (update.quantityReceived !== undefined) {
+      stockSheet.getRange(update.rowNumber, recIdx + 1).setValue(update.quantityReceived);
+    }
+    stockSheet.getRange(update.rowNumber, remIdx + 1).setValue(update.quantityRemaining);
+  });
+  rowsToAdd.forEach((row) => stockSheet.appendRow(row));
 
   return {
     success: true,
-    addedTitles: addedCount,
+    adjustment: operation,
+    adjustedTitles: quantitiesByBook.size,
     totalUnits: totalUnits,
-    message: `Allocated ${totalUnits} copies across ${addedCount} title(s) to ${targetVolunteer}.`
+    message: `${operation === 'add' ? 'Added' : 'Removed'} ${totalUnits} copies across ${quantitiesByBook.size} title(s) ${operation === 'add' ? 'to' : 'from'} ${targetVolunteer}'s inventory.`
   };
 }
 
@@ -1007,12 +1124,16 @@ function addNewLocation(locationName, monthlyTarget) {
   return { success: true, message: `Added location: "${locName}" with monthly target of ${target} books.` };
 }
 
-function addVolunteer(volunteerData) {
+function addVolunteer(volunteerData, sessionToken) {
+  const currentUser = validateSessionToken(sessionToken);
+  if (!currentUser) throw new Error('Your session has expired. Please log in with your PIN again.');
+  if (!currentUser.isAdmin) throw new Error('Only admins can add volunteers.');
+
   ensureSheetsExist();
   const name = String(volunteerData.name || '').trim();
   const email = String(volunteerData.email || '').trim().toLowerCase();
   const role = String(volunteerData.role || 'user').trim().toLowerCase();
-  const pin = String(volunteerData.pin || '1234').trim();
+  const initialPin = '1234';
 
   if (!name) throw new Error('Volunteer Name is required.');
   if (!email || !email.includes('@')) throw new Error('A valid Gmail/Email address is required.');
@@ -1026,8 +1147,27 @@ function addVolunteer(volunteerData) {
   const nextNum = volSheet.getLastRow();
   const volId = 'VOL' + String(nextNum).padStart(3, '0');
 
-  volSheet.appendRow([volId, name, email, role, pin, 'True']);
-  return { success: true, message: `Volunteer "${name}" added successfully with PIN ${pin}.` };
+  volSheet.appendRow([volId, name, email, role, initialPin, 'True']);
+  return { success: true, message: `Volunteer "${name}" added successfully. Initial PIN is 1234; they can change it after signing in.` };
+}
+
+function updateOwnVolunteerPin(currentPin, newPin, sessionToken) {
+  const currentUser = validateSessionToken(sessionToken);
+  if (!currentUser) throw new Error('Your session has expired. Please log in with your PIN again.');
+
+  const enteredPin = String(currentPin || '').trim();
+  const updatedPin = String(newPin || '').trim();
+  if (!/^\d{4,6}$/.test(updatedPin)) throw new Error('PIN must be 4 to 6 digits.');
+
+  const rows = getAllRows(SHEET_NAMES.volunteers);
+  const user = rows.find((row) => String(row.volunteerId || '').trim() === currentUser.volunteerId);
+  if (!user || String(user.pin || '').trim() !== enteredPin) throw new Error('Current PIN is incorrect.');
+  if (enteredPin === updatedPin) throw new Error('Choose a different PIN.');
+  if (!updateVolunteerPinInSheet_(currentUser.volunteerId, updatedPin)) throw new Error('Could not update your PIN.');
+
+  revokeSessionToken(sessionToken);
+  const token = createSessionToken(currentUser.volunteerId);
+  return { success: true, token: token, message: 'Your PIN was updated.' };
 }
 
 function updateVolunteerRole(volunteerId, newRole) {
