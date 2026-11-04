@@ -56,6 +56,9 @@
         margin-bottom: 16px;
         font-size: 13px;
       }
+      .user-badge-toolbar { display: flex; justify-content: flex-end; align-items: center; gap: 8px; }
+      .user-details-toggle { display: none; }
+      .user-details { display: block; }
       .user-badge .role-tag {
         display: inline-block;
         background: var(--primary);
@@ -468,6 +471,27 @@
       @media (max-width: 850px) {
         .app-shell { flex-direction: column; }
         .sidebar { width: 100%; border-right: none; border-bottom: 1px solid var(--line); }
+        .user-badge { padding: 8px 10px; margin-bottom: 8px; }
+        .user-badge-toolbar { justify-content: space-between; }
+        .user-details-toggle {
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          width: 36px;
+          min-height: 28px;
+          padding: 0;
+          border: 1px solid #cbd5e1;
+          border-radius: 6px;
+          background: transparent;
+          color: var(--muted);
+          font-size: 18px;
+          line-height: 1;
+          font-weight: 700;
+          cursor: pointer;
+        }
+        .user-details { display: none; padding-top: 8px; }
+        .user-badge.expanded .user-details { display: block; }
+        .btn-logout { float: none; }
         .nav { flex-direction: row; overflow-x: auto; padding-bottom: 4px; }
         .nav-btn { white-space: nowrap; padding: 8px 12px; font-size: 13px; }
         .main { padding: 14px; }
@@ -541,10 +565,15 @@
         </div>
 
         <div class="user-badge">
-          <button type="button" class="btn-logout" id="btnLogout" title="Log out on this device">Logout</button>
-          <div style="font-weight: 700; font-size: 14px;" id="lblUserName">—</div>
-          <div id="lblUserRole" class="role-tag">Volunteer</div>
-          <button type="button" id="btnChangePin" class="btn-change-pin">Change PIN</button>
+          <div class="user-badge-toolbar">
+            <button type="button" id="btnToggleUserDetails" class="user-details-toggle" aria-label="Collapse account details" title="Collapse account details" aria-expanded="true" aria-controls="userDetails">⌃</button>
+            <button type="button" class="btn-logout" id="btnLogout" title="Log out on this device">Logout</button>
+          </div>
+          <div id="userDetails" class="user-details">
+            <div style="font-weight: 700; font-size: 14px;" id="lblUserName">—</div>
+            <div id="lblUserRole" class="role-tag">Volunteer</div>
+            <button type="button" id="btnChangePin" class="btn-change-pin">Change PIN</button>
+          </div>
         </div>
 
         <nav class="nav">
@@ -580,7 +609,11 @@
               </div>
               <div class="field">
                 <label>Sub-Location / Landmark *</label>
-                <input id="saleSubLocation" list="subLocationsSuggestions" type="text" placeholder="Pick suggestion or type new landmark..." autocomplete="off" />
+                <select id="saleSubLocation">
+                  <option value="">-- Select landmark --</option>
+                  <option value="__other__">Other / enter manually</option>
+                </select>
+                <input id="saleCustomSubLocation" type="text" placeholder="Enter a new landmark" autocomplete="off" style="display: none; margin-top: 8px;" />
               </div>
               <div class="field">
                 <label>Event Date *</label>
@@ -1122,6 +1155,7 @@
         document.querySelectorAll('.nav-btn').forEach((b) => b.classList.toggle('active', b.dataset.page === pageId));
         if (pageId === 'page-history') loadHistory();
         if (pageId === 'page-history' && appData.currentUser && appData.currentUser.isAdmin) loadSalesSummary();
+        if (pageId === 'page-record') updateSubLocationSuggestions();
         if (pageId === 'page-summary') {
           updateSubLocationSuggestions();
           loadSummarySales();
@@ -1204,6 +1238,8 @@
         document.getElementById('lblUserName').textContent = u.name;
         document.getElementById('lblUserRole').textContent = u.isAdmin ? 'Admin' : 'Volunteer';
         document.getElementById('salesSummarySection').style.display = u.isAdmin ? 'block' : 'none';
+        document.querySelector('.user-badge').classList.add('expanded');
+        document.getElementById('btnToggleUserDetails').setAttribute('aria-expanded', 'true');
 
         if (u.isAdmin) {
           document.querySelectorAll('.admin-only').forEach((el) => (el.style.display = 'flex'));
@@ -1305,6 +1341,7 @@
       function updateSubLocationSuggestions() {
         const activeSection = document.querySelector('.page-section.active');
         const isSummaryPage = activeSection && activeSection.id === 'page-summary';
+        const isSalePage = activeSection && activeSection.id === 'page-record';
         const loc = isSummaryPage
           ? document.getElementById('sumLocation').value
           : document.getElementById('saleLocation').value;
@@ -1314,8 +1351,9 @@
         datalist.innerHTML = '';
 
         const knownSubs = (appData.subLocationsMap && appData.subLocationsMap[loc]) || [];
-        if (isSummaryPage) {
-          const subLocationSelect = document.getElementById('sumSubLoc');
+        if (isSummaryPage || isSalePage) {
+          const subLocationSelect = document.getElementById(isSummaryPage ? 'sumSubLoc' : 'saleSubLocation');
+          const customInput = document.getElementById(isSummaryPage ? 'sumCustomSubLoc' : 'saleCustomSubLocation');
           const previousValue = subLocationSelect.value;
           subLocationSelect.innerHTML = '<option value="">-- Select landmark --</option>';
           knownSubs.forEach((subName) => {
@@ -1329,8 +1367,8 @@
           otherOption.textContent = 'Other / enter manually';
           subLocationSelect.appendChild(otherOption);
           if (knownSubs.includes(previousValue)) subLocationSelect.value = previousValue;
-          document.getElementById('sumCustomSubLoc').style.display = 'none';
-          document.getElementById('sumCustomSubLoc').value = '';
+          customInput.style.display = 'none';
+          customInput.value = '';
         }
 
         knownSubs.forEach((subName) => {
@@ -1548,7 +1586,7 @@
         const summaryText = 
 `Bookstall Interaction Summary:
 📍Location: ${fullLoc}
-👥Volunteer: ${volunteers}
+👥Volunteers: ${volunteers}
 📅Date: ${formattedDate}
 📚Books Reached: ${totalBooks}
 🗣️Interactions: ~${interactions}
@@ -1905,6 +1943,12 @@ ${bookListStr}`;
           localStorage.setItem(LAST_SALE_LOCATION_KEY, event.target.value);
           updateSubLocationSuggestions();
         });
+        document.getElementById('saleSubLocation').addEventListener('change', (event) => {
+          const customInput = document.getElementById('saleCustomSubLocation');
+          const showCustomInput = event.target.value === '__other__';
+          customInput.style.display = showCustomInput ? 'block' : 'none';
+          if (showCustomInput) customInput.focus();
+        });
         document.getElementById('sumLocation').addEventListener('change', updateSubLocationSuggestions);
         document.getElementById('sumSubLoc').addEventListener('change', (event) => {
           const customInput = document.getElementById('sumCustomSubLoc');
@@ -1947,6 +1991,16 @@ ${bookListStr}`;
         });
 
         // Logout
+        document.getElementById('btnToggleUserDetails').addEventListener('click', (event) => {
+          const button = event.currentTarget;
+          const isExpanded = button.getAttribute('aria-expanded') === 'true';
+          const willExpand = !isExpanded;
+          button.setAttribute('aria-expanded', String(willExpand));
+          button.setAttribute('aria-label', willExpand ? 'Collapse account details' : 'Expand account details');
+          button.title = willExpand ? 'Collapse account details' : 'Expand account details';
+          button.textContent = willExpand ? '⌃' : '⌄';
+          button.closest('.user-badge').classList.toggle('expanded', willExpand);
+        });
         document.getElementById('btnLogout').addEventListener('click', () => {
           if (confirm('Log out of this device? You will need your PIN to log back in.')) {
             const token = getSessionToken();
@@ -1965,7 +2019,10 @@ ${bookListStr}`;
         // Submit Sale Transaction
         document.getElementById('btnSubmitSale').addEventListener('click', () => {
           const loc = document.getElementById('saleLocation').value.trim();
-          const subLoc = document.getElementById('saleSubLocation').value.trim();
+          const selectedSubLoc = document.getElementById('saleSubLocation').value;
+          const subLoc = selectedSubLoc === '__other__'
+            ? document.getElementById('saleCustomSubLocation').value.trim()
+            : selectedSubLoc.trim();
           const date = document.getElementById('saleDate').value.trim();
           const seller = document.getElementById('saleVolunteer').value.trim();
           const notes = document.getElementById('saleNotes').value.trim();
