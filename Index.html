@@ -467,13 +467,362 @@
 
       @media (max-width: 850px) {
         .app-shell { flex-direction: column; }
-        .sidebar { width: 100%; border-right: none; border-bottom: 1px solid var(--line); }
-        .nav { flex-direction: row; overflow-x: auto; padding-bottom: 4px; }
+        .sidebar {
+          position: sticky;
+          top: 0;
+          z-index: 1000;
+          width: 100%;
+          border-right: none;
+          border-bottom: 1px solid var(--line);
+          padding: 8px 12px 0;
+        }
+        .brand { margin-bottom: 8px; }
+        .brand-mark { font-size: 20px; padding: 4px 8px; }
+        .user-badge {
+          display: grid;
+          grid-template-columns: 1fr auto;
+          align-items: center;
+          gap: 4px 8px;
+          padding: 6px 10px;
+          margin-bottom: 6px;
+        }
+        .user-badge #lblUserName { grid-column: 1; grid-row: 1; }
+        .user-badge #lblUserRole { grid-column: 1; grid-row: 2; justify-self: start; }
+        .user-badge .btn-logout { grid-column: 2; grid-row: 1; }
+        .user-badge .btn-change-pin { grid-column: 2; grid-row: 2; margin-top: 0; }
+        .nav { flex-direction: row; overflow-x: auto; padding-bottom: 6px; }
         .nav-btn { white-space: nowrap; padding: 8px 12px; font-size: 13px; }
         .main { padding: 14px; }
         .panel { padding: 16px; }
         .grid-3, .grid-2 { grid-template-columns: 1fr; }
         .item-row { grid-template-columns: 1fr; gap: 6px; }
+      }
+      /* ===== UI ENHANCEMENTS ===== */
+      html { -webkit-text-size-adjust: 100%; }
+      .field { min-width: 0; }
+      .field input, .field select, .field textarea { width: 100%; min-width: 0; transition: border-color 0.15s ease, box-shadow 0.15s ease; }
+      .field input:focus, .field select:focus, .field textarea:focus,
+      .item-row input:focus, .summary-volunteer-trigger:focus-visible {
+        border-color: var(--primary);
+        box-shadow: 0 0 0 3px rgba(79, 92, 232, 0.15);
+        outline: none;
+      }
+      button:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+      .page-section.active { animation: pageFade 0.18s ease; }
+      @keyframes pageFade { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+
+      .btn-primary { transition: background 0.15s ease, transform 0.1s ease, box-shadow 0.15s ease; box-shadow: 0 2px 6px rgba(79, 92, 232, 0.25); }
+      .btn-primary:hover { background: var(--primary-dark); }
+      .btn-primary:active { transform: scale(0.98); }
+      .btn-primary:disabled { opacity: 0.6; cursor: wait; box-shadow: none; }
+      .target-save-btn:hover { background: #f1f5f9; }
+      .target-card { transition: box-shadow 0.15s ease; }
+      .target-card:hover { box-shadow: var(--shadow); }
+      #activeBookstallsContainer .target-card { border-left: 4px solid var(--green); }
+      .section-header h1 { letter-spacing: -0.01em; }
+      tbody tr:hover td { background: #f8fafc; }
+
+      .toast-host {
+        position: fixed; bottom: 20px; right: 20px; z-index: 99999;
+        display: flex; flex-direction: column; gap: 8px; align-items: flex-end; pointer-events: none;
+      }
+      .toast {
+        color: #fff; padding: 12px 18px; border-radius: 10px; font-weight: 700; font-size: 13px;
+        box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.15); max-width: min(92vw, 380px);
+        animation: pageFade 0.2s ease;
+      }
+      .toast.ok { background: var(--green); }
+      .toast.err { background: var(--red); }
+
+      @media (max-width: 850px) {
+        .sidebar {
+          flex-direction: row;
+          align-items: center;
+          justify-content: space-between;
+          gap: 8px;
+          padding: 8px 12px;
+          box-shadow: 0 1px 6px rgba(15, 23, 42, 0.06);
+        }
+        .brand { margin: 0; min-width: 0; }
+        .brand-text .sub { display: none; }
+        .brand-text .top { font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 38vw; }
+        .user-badge { margin: 0; flex-shrink: 0; }
+        .btn-logout, .btn-change-pin { min-height: 28px; }
+
+        .nav {
+          position: fixed;
+          left: 0; right: 0; bottom: 0;
+          z-index: 1100;
+          flex: none;
+          flex-direction: row;
+          gap: 2px;
+          overflow-x: auto;
+          padding: 6px 6px calc(6px + env(safe-area-inset-bottom));
+          background: #fff;
+          border-top: 1px solid var(--line);
+          box-shadow: 0 -4px 12px rgba(15, 23, 42, 0.06);
+          scrollbar-width: none;
+        }
+        .nav::-webkit-scrollbar { display: none; }
+        .nav-btn {
+          flex: 0 0 auto;
+          min-width: 76px;
+          flex-direction: column;
+          justify-content: center;
+          gap: 2px;
+          padding: 6px 8px;
+          font-size: 11px;
+          line-height: 1.15;
+          text-align: center;
+          white-space: normal;
+        }
+        .nav-btn span { font-size: 20px; line-height: 1; }
+        .nav-btn.active { box-shadow: none; }
+
+        .main { padding: 14px 14px calc(92px + env(safe-area-inset-bottom)); overflow: visible; }
+        .panel { padding: 16px; border-radius: 12px; }
+        .section-header h1 { font-size: 18px; }
+        .grid-3 { grid-template-columns: repeat(2, 1fr); }
+
+        .field input, .field select, .field textarea, .summary-volunteer-trigger,
+        .item-row input { font-size: 16px; min-height: 44px; }
+        .typeahead-dropdown { max-height: 40vh; }
+        .typeahead-item { padding: 12px; font-size: 14px; }
+
+        .item-row { grid-template-columns: 1fr 1fr; gap: 8px; }
+        .item-row > :nth-child(1) { grid-column: 1 / -1; }
+        .item-row > :nth-child(4) { text-align: left !important; padding-top: 0 !important; align-self: center; }
+        .item-row > :nth-child(5) { text-align: right; }
+        .btn-del { width: 44px; height: 44px; }
+        .cart-footer { flex-direction: column; align-items: flex-start; gap: 6px; }
+
+        div[style*="justify-content: flex-end"] > .btn-primary { width: 100%; }
+        .page-section > .panel > div[style*="flex-wrap: wrap"] > * { flex: 1 1 100% !important; min-width: 0 !important; width: 100%; }
+        #activeBookstallsContainer .target-save-btn { flex: 1; height: 44px; }
+        .tab-btn { flex: 1; padding: 10px; }
+
+        .toast-host { left: 12px; right: 12px; bottom: calc(84px + env(safe-area-inset-bottom)); align-items: stretch; }
+        .toast { max-width: none; text-align: center; }
+      }
+
+      @media (max-width: 600px) {
+        .grid-3, .grid-2 { grid-template-columns: 1fr; }
+        .login-card { padding: 22px; }
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        * { animation: none !important; transition: none !important; }
+      }
+      /* ===== REDESIGN: dark sidebar, softer cards ===== */
+      :root { --accent: #fbbf24; --ring: rgba(99, 102, 241, 0.18); }
+      body {
+        background: radial-gradient(900px 380px at 100% -10%, #e0e7ff 0%, rgba(224, 231, 255, 0) 70%), #f4f6fb;
+      }
+
+      .sidebar {
+        width: 280px;
+        align-self: flex-start;
+        position: sticky;
+        top: 0;
+        height: 100vh;
+        overflow-y: auto;
+        padding: 22px 16px;
+        color: #fff;
+        background: linear-gradient(180deg, #1e1b4b 0%, #312e81 100%);
+        border-right: none;
+      }
+      .brand-mark { background: rgba(255, 255, 255, 0.14); box-shadow: none; }
+      .brand-text .top { color: #fff; }
+      .brand-text .sub { color: rgba(255, 255, 255, 0.65); }
+
+      .user-badge {
+        display: grid;
+        grid-template-columns: 42px 1fr;
+        gap: 2px 10px;
+        align-items: center;
+        padding: 12px;
+        margin-bottom: 8px;
+        background: rgba(255, 255, 255, 0.08);
+        border: 1px solid rgba(255, 255, 255, 0.12);
+        border-radius: 14px;
+      }
+      .avatar {
+        grid-row: 1 / 3;
+        width: 42px; height: 42px;
+        display: grid; place-items: center;
+        border-radius: 50%;
+        font-weight: 800; font-size: 17px;
+        color: #1e1b4b;
+        background: linear-gradient(135deg, #fde68a, #f59e0b);
+      }
+      .user-badge #lblUserName { color: #fff; font-size: 14px; }
+      .user-badge .role-tag { margin-top: 0; justify-self: start; background: rgba(255, 255, 255, 0.18); }
+      .user-actions { grid-column: 1 / -1; display: flex; gap: 8px; margin-top: 10px; }
+      .btn-logout, .btn-change-pin {
+        float: none; flex: 1; height: 30px; margin-top: 0;
+        color: rgba(255, 255, 255, 0.85);
+        background: rgba(255, 255, 255, 0.06);
+        border: 1px solid rgba(255, 255, 255, 0.22);
+        border-radius: 8px;
+      }
+      .btn-change-pin:hover { color: #fff; border-color: #fff; }
+      .btn-logout:hover { color: #fecaca; border-color: #fecaca; }
+
+      .nav { gap: 2px; }
+      .nav-label {
+        padding: 16px 12px 6px;
+        font-size: 10px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase;
+        color: rgba(255, 255, 255, 0.45);
+      }
+      .nav-btn { color: rgba(255, 255, 255, 0.75); padding: 8px 10px; }
+      .nav-btn span {
+        width: 30px; height: 30px; display: grid; place-items: center;
+        border-radius: 9px; font-size: 15px;
+        background: rgba(255, 255, 255, 0.08);
+      }
+      .nav-btn:hover { background: rgba(255, 255, 255, 0.08); color: #fff; }
+      .nav-btn.active {
+        background: rgba(255, 255, 255, 0.16);
+        color: #fff;
+        box-shadow: inset 3px 0 0 var(--accent);
+      }
+      .nav-btn.active span { background: var(--accent); }
+
+      .main { padding: 30px 34px; }
+      .panel {
+        border: 1px solid rgba(226, 232, 240, 0.8);
+        border-radius: 18px;
+        padding: 26px;
+        box-shadow: 0 1px 2px rgba(16, 24, 40, 0.04), 0 10px 28px rgba(16, 24, 40, 0.06);
+      }
+      .section-header { padding-bottom: 14px; margin-bottom: 20px; border-bottom: 1px solid var(--line); }
+      .section-header h1 { font-size: 24px; }
+      .section-header p { font-size: 13.5px; }
+
+      .field label { font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
+      .field input, .field select, .field textarea { background: #f8fafc; border-radius: 10px; }
+      .field input:focus, .field select:focus, .field textarea:focus { background: #fff; }
+
+      .btn-primary {
+        background: linear-gradient(135deg, #6366f1, #4f46e5);
+        border-radius: 10px;
+        box-shadow: 0 6px 16px rgba(79, 70, 229, 0.3);
+      }
+      .btn-primary:hover { background: linear-gradient(135deg, #4f46e5, #4338ca); }
+      .btn-add-item { border-radius: 10px; }
+      .items-container { border-radius: 14px; }
+      .item-row { border-radius: 10px; box-shadow: 0 1px 2px rgba(16, 24, 40, 0.04); }
+      th { background: #f1f5f9; }
+      .table-responsive { border-radius: 12px; }
+
+      #activeBookstallsContainer .badge-green::before {
+        content: ''; display: inline-block; width: 7px; height: 7px; margin-right: 5px;
+        border-radius: 50%; background: #16a34a; animation: livePulse 1.6s ease-in-out infinite;
+      }
+      @keyframes livePulse { 0%, 100% { opacity: 1; transform: scale(1); } 50% { opacity: 0.4; transform: scale(0.7); } }
+
+      .login-modal-overlay { background: linear-gradient(135deg, rgba(30, 27, 75, 0.92), rgba(67, 56, 202, 0.88)); }
+      .login-card { border-radius: 22px; padding: 34px 30px; box-shadow: 0 30px 60px rgba(0, 0, 0, 0.35); }
+
+      @media (max-width: 850px) {
+        .sidebar {
+          width: 100%; height: auto; overflow: visible; align-self: auto;
+          padding: 10px 12px;
+          background: linear-gradient(135deg, #1e1b4b, #4338ca);
+          box-shadow: 0 2px 12px rgba(30, 27, 75, 0.25);
+        }
+        .brand-text .top { color: #fff; }
+        .brand-text { display: none; }
+        .brand { flex-shrink: 0; }
+        .user-badge {
+          flex: 1; min-width: 0; margin-left: 10px;
+          grid-template-columns: auto minmax(0, 1fr) auto;
+          gap: 0 8px; padding: 6px 8px; margin-top: 0; margin-bottom: 0; margin-right: 0;
+        }
+        .user-badge #lblUserName { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .avatar { grid-row: 1 / 3; grid-column: 1; width: 32px; height: 32px; font-size: 13px; }
+        .user-badge #lblUserName { grid-column: 2; grid-row: 1; font-size: 13px; }
+        .user-badge #lblUserRole { grid-column: 2; grid-row: 2; font-size: 9px; padding: 1px 7px; }
+        .user-actions { grid-column: 3; grid-row: 1 / 3; flex-direction: column; gap: 3px; margin: 0; }
+        .btn-logout, .btn-change-pin { flex: none; height: 24px; padding: 0 8px; font-size: 10px; }
+
+        .nav-label { display: none !important; }
+        .nav {
+          left: 10px; right: 10px;
+          bottom: calc(10px + env(safe-area-inset-bottom));
+          padding: 6px;
+          border: 1px solid var(--line);
+          border-radius: 20px;
+          background: rgba(255, 255, 255, 0.96);
+          -webkit-backdrop-filter: blur(10px);
+          backdrop-filter: blur(10px);
+          box-shadow: 0 10px 30px rgba(30, 27, 75, 0.2);
+        }
+        .nav-btn { color: var(--muted); min-width: 72px; padding: 6px 8px; font-size: 10.5px; border-radius: 14px; box-shadow: none; }
+        .nav-btn span { width: auto; height: auto; background: transparent; font-size: 20px; }
+        .nav-btn:hover { background: transparent; color: var(--muted); }
+        .nav-btn.active { background: #eef2ff; color: var(--primary); box-shadow: none; }
+        .nav-btn.active span { background: transparent; }
+
+        .main { padding: 16px 14px calc(108px + env(safe-area-inset-bottom)); }
+        .panel { padding: 16px; border-radius: 16px; }
+        .section-header { padding-bottom: 10px; margin-bottom: 14px; }
+        .section-header h1 { font-size: 19px; }
+        .toast-host { bottom: calc(98px + env(safe-area-inset-bottom)); }
+      }
+
+      .user-details { display: contents; }
+      @media (max-width: 850px) {
+        .brand { flex: 1; min-width: 0; }
+        .brand-text { display: block; min-width: 0; }
+        .brand-text .top { display: block; font-size: 12px; max-width: none; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+        .user-badge { flex: none; margin: 0; padding: 0; background: none; border: none; display: block; }
+        .avatar { width: 36px; height: 36px; font-size: 14px; cursor: pointer; border: 2px solid rgba(255, 255, 255, 0.55); }
+        .user-details { display: none; }
+        .user-badge.open .user-details {
+          display: block;
+          position: absolute;
+          top: calc(100% + 6px);
+          right: 12px;
+          min-width: 220px;
+          padding: 14px;
+          background: #fff;
+          border-radius: 14px;
+          box-shadow: 0 14px 34px rgba(30, 27, 75, 0.35);
+          z-index: 1200;
+        }
+        .user-badge.open .user-details #lblUserName { display: block; color: var(--text); font-size: 14px; white-space: normal; overflow: visible; }
+        .user-badge.open .user-details #lblUserRole { display: inline-block; margin-top: 4px; background: #eef2ff; color: var(--primary); }
+        .user-badge.open .user-details .user-actions { display: flex; flex-direction: row; gap: 8px; margin-top: 12px; }
+        .user-badge.open .user-details .btn-logout,
+        .user-badge.open .user-details .btn-change-pin {
+          flex: 1; height: 36px; font-size: 12px;
+          color: var(--text); background: #fff; border: 1px solid var(--line);
+        }
+        .user-badge.open .user-details .btn-logout { color: var(--red); }
+      }
+
+      /* Stop date/time inputs (esp. iOS Safari) from overflowing their column */
+      .grid-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .grid-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+      .grid-2 > *, .grid-3 > * { min-width: 0; }
+      input[type="date"], input[type="time"], input[type="month"] {
+        -webkit-appearance: none;
+        appearance: none;
+        display: block;
+        width: 100%;
+        min-width: 0;
+        max-width: 100%;
+        line-height: normal;
+      }
+      input[type="date"]::-webkit-date-and-time-value,
+      input[type="time"]::-webkit-date-and-time-value { text-align: left; min-height: 1.2em; }
+      @media (max-width: 850px) {
+        .grid-3 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      }
+      @media (max-width: 600px) {
+        .grid-2, .grid-3 { grid-template-columns: minmax(0, 1fr); }
       }
     </style>
   </head>
@@ -486,19 +835,17 @@
     <div id="loginModal" class="login-modal-overlay" style="display: none;">
       <div class="login-card">
         <div style="font-size: 40px; margin-bottom: 12px;">📚</div>
-        <h2>Volunteer Verification</h2>
-        <p>Select your profile and enter your 4-digit PIN to access stall operations.</p>
+        <h2>Volunteer Login</h2>
+        <p>Enter your username and PIN to access stall operations.</p>
 
         <div class="field" style="text-align: left;">
-          <label>Select Your Name *</label>
-          <select id="loginVolunteerSelect" style="width: 100%;">
-            <option value="">-- Choose Name --</option>
-          </select>
+          <label for="loginUsernameInput">Username *</label>
+          <input id="loginUsernameInput" type="text" autocomplete="username" autocapitalize="none" spellcheck="false" placeholder="Enter username" style="width: 100%;" />
         </div>
 
         <div class="field" style="text-align: left;">
-          <label>4-Digit PIN *</label>
-          <input id="loginPinInput" type="password" maxlength="6" placeholder="Enter PIN..." style="width: 100%; font-size: 18px; letter-spacing: 4px; text-align: center;" />
+          <label for="loginPinInput">PIN *</label>
+          <input id="loginPinInput" type="password" inputmode="numeric" maxlength="6" autocomplete="current-password" placeholder="Enter PIN..." style="width: 100%; font-size: 18px; letter-spacing: 4px; text-align: center;" />
         </div>
 
         <button class="btn-primary" id="btnSubmitLogin" type="button" style="width: 100%; margin-top: 10px;">
@@ -541,32 +888,43 @@
         </div>
 
         <div class="user-badge">
-          <button type="button" class="btn-logout" id="btnLogout" title="Log out on this device">Logout</button>
+          <div class="avatar" id="lblAvatar">?</div>
+          <div class="user-details">
           <div style="font-weight: 700; font-size: 14px;" id="lblUserName">—</div>
           <div id="lblUserRole" class="role-tag">Volunteer</div>
-          <button type="button" id="btnChangePin" class="btn-change-pin">Change PIN</button>
+          <div class="user-actions">
+            <button type="button" id="btnChangePin" class="btn-change-pin">Change PIN</button>
+            <button type="button" class="btn-logout" id="btnLogout" title="Log out on this device">Logout</button>
+          </div>
+          </div>
         </div>
 
         <nav class="nav">
-          <button class="nav-btn active" data-page="page-record"><span>📒</span> Record Sales</button>
-          <button class="nav-btn" data-page="page-summary"><span>🗣️</span> Post-Stall Summary</button>
+          <div class="nav-label">Bookstall</div>
+          <button class="nav-btn active" data-page="page-event"><span>📍</span> New Bookstall</button>
+          <button class="nav-btn" data-page="page-active"><span>🟢</span> Active Bookstalls</button>
+          <button class="nav-btn" data-page="page-record"><span>📒</span> Record Sales</button>
+          <button class="nav-btn" data-page="page-summary"><span>🗣️</span> Interaction Summary</button>
+          <div class="nav-label">Insights</div>
           <button class="nav-btn" data-page="page-prices"><span>🏷️</span> Price Insights</button>
           <button class="nav-btn" data-page="page-targets"><span>🎯</span> Location Targets</button>
           <button class="nav-btn" data-page="page-history"><span>🕒</span> History & Audit</button>
+          <div class="nav-label">Inventory</div>
           <button class="nav-btn" data-page="page-stock"><span>📦</span> Manage Stock</button>
           <button class="nav-btn" data-page="page-inventory"><span>📊</span> Inventory</button>
+          <div class="nav-label admin-only">Admin</div>
           <button class="nav-btn admin-only" data-page="page-users"><span>👥</span> Volunteers</button>
         </nav>
       </aside>
 
       <main class="main">
-        <!-- 1. RECORD SALES -->
-        <section id="page-record" class="page-section active">
-          <div class="panel">
+        <!-- NEW BOOKSTALL -->
+        <section id="page-event" class="page-section active">
+          <div class="panel" style="max-width: 760px;">
             <div class="section-header">
               <div>
-                <h1>Record Transactions</h1>
-                <p>One stall event links multiple sales. Type to search titles with custom prices.</p>
+                <h1>Start a Bookstall</h1>
+                <p>Set up today's bookstall. Sales and the interaction summary are recorded against it.</p>
               </div>
             </div>
 
@@ -574,17 +932,76 @@
               <div class="field">
                 <label>Major Location *</label>
                 <div style="display: flex; gap: 6px;">
-                  <select id="saleLocation" style="flex: 1;"></select>
+                  <select id="eventLocation" style="flex: 1;"></select>
                   <button type="button" id="btnQuickAddLoc" title="Add New Location" style="border: 1px solid var(--line); border-radius: 8px; background: #fff; padding: 0 10px; cursor: pointer;">➕</button>
                 </div>
               </div>
               <div class="field">
                 <label>Sub-Location / Landmark *</label>
-                <input id="saleSubLocation" list="subLocationsSuggestions" type="text" placeholder="Pick suggestion or type new landmark..." autocomplete="off" />
+                <select id="eventSubLocation">
+                  <option value="">-- Select landmark --</option>
+                  <option value="__other__">Other / enter manually</option>
+                </select>
+                <input id="eventCustomSubLocation" type="text" placeholder="Enter a new landmark" autocomplete="off" style="display: none; margin-top: 8px;" />
               </div>
               <div class="field">
-                <label>Event Date *</label>
+                <label>Date *</label>
+                <input id="eventDate" type="date" />
+              </div>
+            </div>
+
+            <div class="grid-2">
+              <div class="field">
+                <label>Start Time</label>
+                <input id="eventStartTime" type="time" />
+              </div>
+              <div class="field">
+                <label>Volunteers</label>
+                <div class="summary-volunteer-picker" id="evtVolunteerPicker">
+                  <button id="evtVolunteers" class="summary-volunteer-trigger" type="button" aria-haspopup="listbox" aria-expanded="false">Select volunteers</button>
+                  <div id="evtVolunteerDropdown" class="summary-volunteer-dropdown" role="listbox" aria-label="Volunteers" aria-multiselectable="true" hidden></div>
+                </div>
+                <input id="evtAdditionalVolunteers" type="text" placeholder="Add unlisted name(s), separated by commas" />
+              </div>
+            </div>
+
+            <div style="display: flex; justify-content: flex-end;">
+              <button class="btn-primary" id="btnCreateEvent" type="button">Start Bookstall & Record Sales</button>
+            </div>
+          </div>
+        </section>
+
+        <!-- ACTIVE BOOKSTALLS -->
+        <section id="page-active" class="page-section">
+          <div class="panel">
+            <div class="section-header">
+              <div>
+                <h1>Active Bookstalls</h1>
+                <p>Today's bookstalls. One becomes inactive once its interaction summary is saved or the day ends.</p>
+              </div>
+            </div>
+            <div id="activeBookstallsContainer"></div>
+          </div>
+        </section>
+
+        <!-- RECORD SALES -->
+        <section id="page-record" class="page-section">
+          <div class="panel">
+            <div class="section-header">
+              <div>
+                <h1>Record Transactions</h1>
+                <p>Pick the date, then the bookstall. Type to search titles with custom prices.</p>
+              </div>
+            </div>
+
+            <div class="grid-2">
+              <div class="field">
+                <label>Date *</label>
                 <input id="saleDate" type="date" />
+              </div>
+              <div class="field">
+                <label>Bookstall *</label>
+                <select id="saleEvent"></select>
               </div>
             </div>
 
@@ -620,28 +1037,24 @@
           </div>
         </section>
 
-        <!-- 2. SUMMARY GENERATOR -->
+        <!-- INTERACTION SUMMARY -->
         <section id="page-summary" class="page-section">
           <div class="panel" style="max-width: 680px;">
             <div class="section-header">
               <div>
                 <h1>Stall Interaction Summary</h1>
-                <p>Generates WhatsApp message and updates the exact stall session in Events.</p>
+                <p>Pick the date and bookstall to generate its summary</p>
               </div>
             </div>
 
             <div class="grid-2">
               <div class="field">
-                <label>Major Location *</label>
-                <select id="sumLocation"></select>
+                <label>Date *</label>
+                <input id="sumDate" type="date" />
               </div>
               <div class="field">
-                <label>Sub-Location / Landmark *</label>
-                <select id="sumSubLoc">
-                  <option value="">-- Select landmark --</option>
-                  <option value="__other__">Other / enter manually</option>
-                </select>
-                <input id="sumCustomSubLoc" type="text" placeholder="Enter a new landmark" autocomplete="off" style="display: none; margin-top: 8px;" />
+                <label>Bookstall *</label>
+                <select id="sumEvent"></select>
               </div>
             </div>
 
@@ -653,10 +1066,6 @@
                   <div id="sumVolunteerDropdown" class="summary-volunteer-dropdown" role="listbox" aria-label="Volunteers" aria-multiselectable="true" hidden></div>
                 </div>
                 <input id="sumAdditionalVolunteers" type="text" placeholder="Add unlisted name(s), separated by commas" />
-              </div>
-              <div class="field">
-                <label>Date *</label>
-                <input id="sumDate" type="date" />
               </div>
             </div>
 
@@ -930,6 +1339,10 @@
                 <input id="newVolName" type="text" placeholder="e.g. Ramesh Kumar" />
               </div>
               <div class="field">
+                <label>Username *</label>
+                <input id="newVolUsername" type="text" autocapitalize="none" placeholder="e.g. ramesh.k" />
+              </div>
+              <div class="field">
                 <label>Gmail Address *</label>
                 <input id="newVolEmail" type="email" placeholder="name@gmail.com" />
               </div>
@@ -963,6 +1376,7 @@
                   <tr>
                     <th style="width: 80px;">ID</th>
                     <th style="min-width: 140px;">Name</th>
+                    <th style="min-width: 110px;">Username</th>
                     <th style="min-width: 180px;">Email</th>
                     <th style="width: 140px;">Role</th>
                     <th style="width: 100px;">Status</th>
@@ -1105,34 +1519,57 @@
       }
 
       function showToast(msg, isSuccess = true) {
+        let host = document.getElementById('toastHost');
+        if (!host) {
+          host = document.createElement('div');
+          host.id = 'toastHost';
+          host.className = 'toast-host';
+          host.setAttribute('role', 'status');
+          document.body.appendChild(host);
+        }
         const el = document.createElement('div');
-        el.style.cssText = `
-          position: fixed; bottom: 20px; right: 20px; z-index: 99999;
-          background: ${isSuccess ? '#10b981' : '#ef4444'}; color: #fff;
-          padding: 12px 18px; border-radius: 8px; font-weight: 700; font-size: 13px;
-          box-shadow: 0 10px 15px -3px rgba(0,0,0,0.1);
-        `;
+        el.className = 'toast ' + (isSuccess ? 'ok' : 'err');
         el.textContent = msg;
-        document.body.appendChild(el);
+        host.appendChild(el);
         setTimeout(() => el.remove(), 4000);
       }
 
       function showPage(pageId) {
         document.querySelectorAll('.page-section').forEach((s) => s.classList.toggle('active', s.id === pageId));
         document.querySelectorAll('.nav-btn').forEach((b) => b.classList.toggle('active', b.dataset.page === pageId));
+        window.scrollTo(0, 0);
+        const activeNavBtn = document.querySelector('.nav-btn.active');
+        if (activeNavBtn) activeNavBtn.scrollIntoView({ inline: 'center', block: 'nearest' });
         if (pageId === 'page-history') loadHistory();
         if (pageId === 'page-history' && appData.currentUser && appData.currentUser.isAdmin) loadSalesSummary();
+        if (pageId === 'page-event') updateSubLocationSuggestions();
+        if (pageId === 'page-active') renderActiveBookstalls();
+        if (pageId === 'page-record') {
+          refreshEventSelect('saleDate', 'saleEvent');
+          redirectIfNoBookstall('saleDate');
+        }
         if (pageId === 'page-summary') {
-          updateSubLocationSuggestions();
+          refreshEventSelect('sumDate', 'sumEvent');
           loadSummarySales();
+          redirectIfNoBookstall('sumDate');
         }
         if (pageId === 'page-targets') loadTargets();
         if (pageId === 'page-prices') loadPriceInsights();
         if (pageId === 'page-inventory') loadInventory();
       }
 
+      function redirectIfNoBookstall(dateId) {
+        if (!appData.currentUser) return;
+        const date = document.getElementById(dateId).value;
+        if ((appData.events || []).some((ev) => ev.date === date)) return;
+        if (date) document.getElementById('eventDate').value = date;
+        showPage('page-event');
+        showToast('No bookstall on this date. Start one first.', false);
+      }
+
       function init() {
-        const todayIso = new Date().toISOString().split('T')[0];
+        const todayIso = formatLocalIsoDate(new Date());
+        document.getElementById('eventDate').value = todayIso;
         document.getElementById('saleDate').value = todayIso;
         document.getElementById('sumDate').value = todayIso;
         document.getElementById('targetMonthPicker').value = todayIso.substring(0, 7);
@@ -1148,9 +1585,29 @@
           if (!e.target.closest('#sumVolunteerPicker')) {
             setSummaryVolunteerDropdownOpen(false);
           }
+          if (!e.target.closest('#evtVolunteerPicker')) {
+            setEventVolunteerDropdownOpen(false);
+          }
+          if (!e.target.closest('.user-badge')) {
+            document.querySelector('.user-badge').classList.remove('open');
+          }
+        });
+
+        document.addEventListener('visibilitychange', () => {
+          if (!document.hidden) renderActiveBookstalls();
         });
 
         bindEventListeners();
+
+        const userBadge = document.querySelector('.user-badge');
+        document.getElementById('lblAvatar').addEventListener('click', () => userBadge.classList.toggle('open'));
+        document.querySelector('.user-actions').addEventListener('click', () => userBadge.classList.remove('open'));
+
+        ['loginUsernameInput', 'loginPinInput'].forEach((id) => {
+          document.getElementById(id).addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') document.getElementById('btnSubmitLogin').click();
+          });
+        });
 
         const existingToken = getSessionToken();
         if (existingToken) {
@@ -1161,21 +1618,8 @@
       }
 
       function showLoginModal() {
-        const modal = document.getElementById('loginModal');
-        modal.style.display = 'flex';
-
-        google.script.run
-          .withSuccessHandler((vols) => {
-            const sel = document.getElementById('loginVolunteerSelect');
-            sel.innerHTML = '<option value="">-- Choose Name --</option>';
-            vols.forEach((v) => {
-              const opt = document.createElement('option');
-              opt.value = v.volunteerId;
-              opt.textContent = v.name;
-              sel.appendChild(opt);
-            });
-          })
-          .getVolunteersForLogin();
+        document.getElementById('loginModal').style.display = 'flex';
+        document.getElementById('loginUsernameInput').focus();
       }
 
       function loadAppDataWithToken(token) {
@@ -1202,6 +1646,7 @@
         const u = res.currentUser;
 
         document.getElementById('lblUserName').textContent = u.name;
+        document.getElementById('lblAvatar').textContent = String(u.name || '?').trim().charAt(0).toUpperCase();
         document.getElementById('lblUserRole').textContent = u.isAdmin ? 'Admin' : 'Volunteer';
         document.getElementById('salesSummarySection').style.display = u.isAdmin ? 'block' : 'none';
 
@@ -1222,7 +1667,9 @@
 
         populateDropdowns();
         updateSubLocationSuggestions();
-
+        refreshEventSelect('saleDate', 'saleEvent');
+        refreshEventSelect('sumDate', 'sumEvent');
+        renderActiveBookstalls();
         document.getElementById('saleItemsList').innerHTML = '';
         addSaleItemRow();
         renderVolunteersTable();
@@ -1230,11 +1677,11 @@
       }
 
       function populateDropdowns() {
-        const locSelects = ['saleLocation', 'sumLocation', 'histLocationFilter'];
+        const locSelects = ['eventLocation', 'histLocationFilter'];
         locSelects.forEach((id) => {
           const el = document.getElementById(id);
           if (!el) return;
-          const previousValue = id === 'saleLocation'
+          const previousValue = id === 'eventLocation'
             ? el.value || localStorage.getItem(LAST_SALE_LOCATION_KEY) || ''
             : el.value;
           const isFilter = id.includes('Filter');
@@ -1247,7 +1694,7 @@
           });
           if (Array.from(el.options).some((option) => option.value === previousValue)) {
             el.value = previousValue;
-          } else if (id === 'saleLocation') {
+          } else if (id === 'eventLocation') {
             localStorage.removeItem(LAST_SALE_LOCATION_KEY);
           }
         });
@@ -1287,6 +1734,92 @@
           volunteerDropdown.appendChild(label);
         });
         updateSummaryVolunteerLabel();
+
+        const eventVolunteerDropdown = document.getElementById('evtVolunteerDropdown');
+        eventVolunteerDropdown.innerHTML = '';
+        appData.volunteers.forEach((volunteer) => {
+          const label = document.createElement('label');
+          label.className = 'summary-volunteer-option';
+          const checkbox = document.createElement('input');
+          checkbox.type = 'checkbox';
+          checkbox.value = volunteer.name;
+          checkbox.checked = volunteer.name === appData.currentUser.name;
+          checkbox.addEventListener('change', updateEventVolunteerLabel);
+          const name = document.createElement('span');
+          name.textContent = volunteer.name;
+          label.append(checkbox, name);
+          eventVolunteerDropdown.appendChild(label);
+        });
+        updateEventVolunteerLabel();
+      }
+
+      function setEventVolunteerDropdownOpen(isOpen) {
+        const button = document.getElementById('evtVolunteers');
+        document.getElementById('evtVolunteerDropdown').hidden = !isOpen;
+        button.setAttribute('aria-expanded', String(isOpen));
+      }
+
+      function updateEventVolunteerLabel() {
+        const selectedNames = Array.from(document.querySelectorAll('#evtVolunteerDropdown input:checked'))
+          .map((checkbox) => checkbox.value);
+        document.getElementById('evtVolunteers').textContent = selectedNames.join(', ') || 'Select volunteers';
+      }
+
+      function prefillSummaryVolunteers(ev) {
+        const names = String((ev && ev.volunteers) || '').split(',').map((n) => n.trim()).filter(Boolean);
+        if (!names.length) return;
+        const matched = new Set();
+        document.querySelectorAll('#sumVolunteerDropdown input').forEach((checkbox) => {
+          const isListed = names.some((n) => n.toLowerCase() === checkbox.value.toLowerCase());
+          checkbox.checked = isListed;
+          if (isListed) matched.add(checkbox.value.toLowerCase());
+        });
+        document.getElementById('sumAdditionalVolunteers').value = names.filter((n) => !matched.has(n.toLowerCase())).join(', ');
+        updateSummaryVolunteerLabel();
+      }
+
+      function renderActiveBookstalls() {
+        const container = document.getElementById('activeBookstallsContainer');
+        if (!container) return;
+        const today = formatLocalIsoDate(new Date());
+        const active = (appData.events || []).filter((ev) => ev.date === today && ev.status !== 'completed');
+        container.innerHTML = '';
+        if (!active.length) {
+          container.innerHTML = '<p style="color:var(--muted);">No active bookstalls today. Start one from New Bookstall.</p>';
+          return;
+        }
+        active.forEach((ev) => {
+          const card = document.createElement('div');
+          card.className = 'target-card';
+
+          const header = document.createElement('div');
+          header.className = 'target-header';
+          const title = document.createElement('span');
+          title.textContent = `📍 ${ev.subLocation}, ${ev.location}`;
+          const badge = document.createElement('span');
+          badge.className = 'badge badge-green';
+          badge.textContent = 'Active';
+          header.append(title, badge);
+
+          const details = document.createElement('div');
+          details.style.cssText = 'font-size: 12px; color: var(--muted); margin-bottom: 10px;';
+          details.textContent = `Started: ${ev.startTime || '—'}  |  Volunteers: ${ev.volunteers || '—'}`;
+
+          const actions = document.createElement('div');
+          actions.style.cssText = 'display: flex; gap: 8px; flex-wrap: wrap;';
+          [['sales', 'Record Sales'], ['summary', 'Interaction Summary']].forEach(([action, text]) => {
+            const button = document.createElement('button');
+            button.type = 'button';
+            button.className = 'target-save-btn';
+            button.dataset.action = action;
+            button.dataset.eventId = ev.eventId;
+            button.textContent = text;
+            actions.appendChild(button);
+          });
+
+          card.append(header, details, actions);
+          container.appendChild(card);
+        });
       }
 
       function setSummaryVolunteerDropdownOpen(isOpen) {
@@ -1303,41 +1836,46 @@
       }
 
       function updateSubLocationSuggestions() {
-        const activeSection = document.querySelector('.page-section.active');
-        const isSummaryPage = activeSection && activeSection.id === 'page-summary';
-        const loc = isSummaryPage
-          ? document.getElementById('sumLocation').value
-          : document.getElementById('saleLocation').value;
-
-        const datalist = document.getElementById('subLocationsSuggestions');
-        if (!datalist) return;
-        datalist.innerHTML = '';
-
+        const loc = document.getElementById('eventLocation').value;
         const knownSubs = (appData.subLocationsMap && appData.subLocationsMap[loc]) || [];
-        if (isSummaryPage) {
-          const subLocationSelect = document.getElementById('sumSubLoc');
-          const previousValue = subLocationSelect.value;
-          subLocationSelect.innerHTML = '<option value="">-- Select landmark --</option>';
-          knownSubs.forEach((subName) => {
-            const option = document.createElement('option');
-            option.value = subName;
-            option.textContent = subName;
-            subLocationSelect.appendChild(option);
-          });
-          const otherOption = document.createElement('option');
-          otherOption.value = '__other__';
-          otherOption.textContent = 'Other / enter manually';
-          subLocationSelect.appendChild(otherOption);
-          if (knownSubs.includes(previousValue)) subLocationSelect.value = previousValue;
-          document.getElementById('sumCustomSubLoc').style.display = 'none';
-          document.getElementById('sumCustomSubLoc').value = '';
-        }
-
+        const subLocationSelect = document.getElementById('eventSubLocation');
+        const customInput = document.getElementById('eventCustomSubLocation');
+        const previousValue = subLocationSelect.value;
+        subLocationSelect.innerHTML = '<option value="">-- Select landmark --</option>';
         knownSubs.forEach((subName) => {
-          const opt = document.createElement('option');
-          opt.value = subName;
-          datalist.appendChild(opt);
+          const option = document.createElement('option');
+          option.value = subName;
+          option.textContent = subName;
+          subLocationSelect.appendChild(option);
         });
+        const otherOption = document.createElement('option');
+        otherOption.value = '__other__';
+        otherOption.textContent = 'Other / enter manually';
+        subLocationSelect.appendChild(otherOption);
+        if (knownSubs.includes(previousValue)) subLocationSelect.value = previousValue;
+        customInput.style.display = 'none';
+        customInput.value = '';
+      }
+
+      function refreshEventSelect(dateId, selectId, preferredEventId) {
+        const date = document.getElementById(dateId).value;
+        const select = document.getElementById(selectId);
+        const previous = preferredEventId || select.value;
+        const events = (appData.events || []).filter((ev) => ev.date === date);
+        select.innerHTML = '';
+        if (!events.length) {
+          select.innerHTML = '<option value="">No bookstalls on this date - start one first</option>';
+          return;
+        }
+        select.innerHTML = '<option value="">-- Select bookstall --</option>';
+        events.forEach((ev) => {
+          const option = document.createElement('option');
+          option.value = ev.eventId;
+          option.textContent = `${ev.subLocation}, ${ev.location}`;
+          select.appendChild(option);
+        });
+        if (events.some((ev) => ev.eventId === previous)) select.value = previous;
+        else if (events.length === 1) select.value = events[0].eventId;
       }
 
       function addSaleItemRow() {
@@ -1477,11 +2015,6 @@
       }
 
       function generateInteractionSummary() {
-        const loc = document.getElementById('sumLocation').value.trim();
-        const selectedSubLoc = document.getElementById('sumSubLoc').value;
-        const subLoc = selectedSubLoc === '__other__'
-          ? document.getElementById('sumCustomSubLoc').value.trim()
-          : selectedSubLoc.trim();
         const selectedVolunteers = Array.from(document.querySelectorAll('#sumVolunteerDropdown input:checked'))
           .map((checkbox) => checkbox.value);
         const additionalVolunteers = document.getElementById('sumAdditionalVolunteers').value
@@ -1489,27 +2022,26 @@
         const volunteerNames = [...selectedVolunteers, ...additionalVolunteers]
           .filter((name, index, names) => names.findIndex((candidate) => candidate.toLowerCase() === name.toLowerCase()) === index);
         const volunteers = volunteerNames.join(', ');
-        const dateRaw = document.getElementById('sumDate').value.trim();
+        const eventId = document.getElementById('sumEvent').value;
+        const selectedEvent = (appData.events || []).find((ev) => ev.eventId === eventId);
         const interactions = document.getElementById('sumInteractions').value.trim() || '—';
         const durationRaw = document.getElementById('sumDuration').value.trim();
         const duration = durationRaw === '' ? '' : Number(durationRaw);
         const durationDisplay = durationRaw === '' ? '—' : durationRaw;
         const appInstalls = document.getElementById('sumAppInstalls').value.trim() || '0';
 
-        if (!loc) { showToast('Please select Major Location.', false); return; }
-        if (!subLoc) { showToast('Please enter Sub-Location / Landmark.', false); return; }
+        if (!selectedEvent) { showToast('Please select a bookstall.', false); return; }
         if (!volunteers) { showToast('Please enter Volunteers on Duty.', false); return; }
-        if (!dateRaw) { showToast('Please select Date.', false); return; }
         if (duration !== '' && (!Number.isFinite(duration) || duration < 0)) {
           showToast('Duration must be a non-negative number of hours.', false);
           return;
         }
 
-        let formattedDate = dateRaw;
-        if (dateRaw) {
-          const d = new Date(dateRaw);
-          formattedDate = d.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
-        }
+        const loc = selectedEvent.location;
+        const subLoc = selectedEvent.subLocation;
+        const dateRaw = selectedEvent.date;
+        const formattedDate = new Date(dateRaw + 'T00:00:00')
+          .toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
 
         if (getCachedData('sales:all') === null) {
           loadSummarySales();
@@ -1517,13 +2049,7 @@
           return;
         }
 
-        const matchedSales = (allSalesRecords || []).filter((s) => {
-          const sDate = s.date || (s.timestamp ? s.timestamp.substring(0, 10) : '');
-          const mDate = sDate === dateRaw;
-          const mLoc = String(s.location || '').trim().toLowerCase() === loc.toLowerCase();
-          const mSubLoc = String(s.subLocation || '').trim().toLowerCase() === subLoc.toLowerCase();
-          return mDate && mLoc && mSubLoc;
-        });
+        const matchedSales = (allSalesRecords || []).filter((s) => s.eventId === eventId);
 
         const bookCounts = {};
         let totalBooks = 0;
@@ -1548,7 +2074,7 @@
         const summaryText = 
 `Bookstall Interaction Summary:
 📍Location: ${fullLoc}
-👥Volunteer: ${volunteers}
+👥Volunteers: ${volunteers}
 📅Date: ${formattedDate}
 📚Books Reached: ${totalBooks}
 🗣️Interactions: ~${interactions}
@@ -1570,15 +2096,13 @@ ${bookListStr}`;
           })
           .withFailureHandler((err) => showToast(err.message, false))
           .saveEventSummary({
-            location: loc,
-            subLocation: subLoc,
-            date: dateRaw,
+            eventId: eventId,
             volunteers: volunteers,
             interactions: interactions,
             durationHours: duration,
             booksDistributed: totalBooks,
             appInstalls: appInstalls
-          });
+          }, getSessionToken());
       }
 
       function loadPriceInsights() {
@@ -1862,6 +2386,7 @@ ${bookListStr}`;
           tr.innerHTML = `
             <td>${v.volunteerId}</td>
             <td><strong>${v.name}</strong></td>
+            <td>${v.username || ''}</td>
             <td>${v.email}</td>
             <td>
               <select onchange="changeRole('${v.volunteerId}', this.value)" style="height: 30px; border-radius: 6px; border: 1px solid var(--line); font-weight:600;">
@@ -1901,16 +2426,91 @@ ${bookListStr}`;
       function bindEventListeners() {
         document.getElementById('btnAddSaleItem').addEventListener('click', addSaleItemRow);
 
-        document.getElementById('saleLocation').addEventListener('change', (event) => {
+        document.getElementById('eventLocation').addEventListener('change', (event) => {
           localStorage.setItem(LAST_SALE_LOCATION_KEY, event.target.value);
           updateSubLocationSuggestions();
         });
-        document.getElementById('sumLocation').addEventListener('change', updateSubLocationSuggestions);
-        document.getElementById('sumSubLoc').addEventListener('change', (event) => {
-          const customInput = document.getElementById('sumCustomSubLoc');
+        document.getElementById('eventSubLocation').addEventListener('change', (event) => {
+          const customInput = document.getElementById('eventCustomSubLocation');
           const showCustomInput = event.target.value === '__other__';
           customInput.style.display = showCustomInput ? 'block' : 'none';
           if (showCustomInput) customInput.focus();
+        });
+        document.getElementById('saleDate').addEventListener('change', () => {
+          refreshEventSelect('saleDate', 'saleEvent');
+          redirectIfNoBookstall('saleDate');
+        });
+        document.getElementById('sumDate').addEventListener('change', () => {
+          refreshEventSelect('sumDate', 'sumEvent');
+          redirectIfNoBookstall('sumDate');
+        });
+        document.getElementById('sumEvent').addEventListener('change', (event) => {
+          prefillSummaryVolunteers((appData.events || []).find((ev) => ev.eventId === event.target.value));
+        });
+        document.getElementById('evtVolunteers').addEventListener('click', () => {
+          const isOpen = document.getElementById('evtVolunteers').getAttribute('aria-expanded') === 'true';
+          setEventVolunteerDropdownOpen(!isOpen);
+        });
+        document.getElementById('activeBookstallsContainer').addEventListener('click', (event) => {
+          const button = event.target.closest('button[data-action]');
+          if (!button) return;
+          const ev = (appData.events || []).find((item) => item.eventId === button.dataset.eventId);
+          if (!ev) return;
+          if (button.dataset.action === 'sales') {
+            document.getElementById('saleDate').value = ev.date;
+            showPage('page-record');
+            refreshEventSelect('saleDate', 'saleEvent', ev.eventId);
+          } else {
+            document.getElementById('sumDate').value = ev.date;
+            showPage('page-summary');
+            refreshEventSelect('sumDate', 'sumEvent', ev.eventId);
+            prefillSummaryVolunteers(ev);
+          }
+        });
+
+        document.getElementById('btnCreateEvent').addEventListener('click', () => {
+          const location = document.getElementById('eventLocation').value.trim();
+          const selectedSubLoc = document.getElementById('eventSubLocation').value;
+          const subLocation = selectedSubLoc === '__other__'
+            ? document.getElementById('eventCustomSubLocation').value.trim()
+            : selectedSubLoc.trim();
+          const date = document.getElementById('eventDate').value.trim();
+          const startTime = document.getElementById('eventStartTime').value;
+          const selectedVolunteers = Array.from(document.querySelectorAll('#evtVolunteerDropdown input:checked'))
+            .map((checkbox) => checkbox.value);
+          const additionalVolunteers = document.getElementById('evtAdditionalVolunteers').value
+            .split(',').map((name) => name.trim()).filter(Boolean);
+          const volunteers = [...selectedVolunteers, ...additionalVolunteers]
+            .filter((name, index, names) => names.findIndex((c) => c.toLowerCase() === name.toLowerCase()) === index);
+
+          if (!location) { showToast('Please select a Major Location.', false); return; }
+          if (!subLocation) { showToast('Please select or enter a Sub-Location / Landmark.', false); return; }
+          if (!date) { showToast('Please select a Date.', false); return; }
+
+          const button = document.getElementById('btnCreateEvent');
+          button.disabled = true;
+          google.script.run
+            .withSuccessHandler((res) => {
+              button.disabled = false;
+              showToast(res.message);
+              const ev = res.event;
+              appData.events = (appData.events || []).filter((e) => e.eventId !== ev.eventId);
+              appData.events.unshift(ev);
+              appData.subLocationsMap = appData.subLocationsMap || {};
+              const known = appData.subLocationsMap[location] || [];
+              if (!known.some((name) => name.toLowerCase() === subLocation.toLowerCase())) {
+                appData.subLocationsMap[location] = [...known, subLocation];
+              }
+              document.getElementById('saleDate').value = ev.date;
+              renderActiveBookstalls();
+              showPage('page-record');
+              refreshEventSelect('saleDate', 'saleEvent', ev.eventId);
+            })
+            .withFailureHandler((err) => {
+              button.disabled = false;
+              showToast(err.message, false);
+            })
+            .createEvent({ location: location, subLocation: subLocation, date: date, startTime: startTime, volunteers: volunteers }, getSessionToken());
         });
 
         // Price Filters
@@ -1924,13 +2524,13 @@ ${bookListStr}`;
 
         // Submit Login Modal
         document.getElementById('btnSubmitLogin').addEventListener('click', () => {
-          const volId = document.getElementById('loginVolunteerSelect').value;
+          const username = document.getElementById('loginUsernameInput').value.trim();
           const pin = document.getElementById('loginPinInput').value.trim();
 
-          if (!volId) { showToast('Please select your volunteer name.', false); return; }
-          if (!pin) { showToast('Please enter your 4-digit PIN.', false); return; }
+          if (!username) { showToast('Please enter your username.', false); return; }
+          if (!pin) { showToast('Please enter your PIN.', false); return; }
 
-          showToast('Verifying PIN...');
+          showToast('Signing in...');
           google.script.run
             .withSuccessHandler((res) => {
               if (res.success) {
@@ -1943,7 +2543,7 @@ ${bookListStr}`;
               }
             })
             .withFailureHandler((err) => showToast(err.message, false))
-            .verifyVolunteerPin(volId, pin);
+            .loginWithCredentials(username, pin);
         });
 
         // Logout
@@ -1964,15 +2564,11 @@ ${bookListStr}`;
 
         // Submit Sale Transaction
         document.getElementById('btnSubmitSale').addEventListener('click', () => {
-          const loc = document.getElementById('saleLocation').value.trim();
-          const subLoc = document.getElementById('saleSubLocation').value.trim();
-          const date = document.getElementById('saleDate').value.trim();
+          const eventId = document.getElementById('saleEvent').value;
           const seller = document.getElementById('saleVolunteer').value.trim();
           const notes = document.getElementById('saleNotes').value.trim();
 
-          if (!loc) { showToast('Please select a Major Location.', false); return; }
-          if (!subLoc) { showToast('Please enter Sub-Location / Landmark.', false); return; }
-          if (!date) { showToast('Please select an Event Date.', false); return; }
+          if (!eventId) { showToast('Please select a bookstall. Start one first if needed.', false); return; }
           if (!seller) { showToast('Please select Sold By.', false); return; }
 
           const items = [];
@@ -1992,9 +2588,7 @@ ${bookListStr}`;
           }
 
           const payload = {
-            location: loc,
-            subLocation: subLoc,
-            eventDate: date,
+            eventId: eventId,
             sellerName: seller,
             notes: notes,
             items: items
@@ -2005,11 +2599,6 @@ ${bookListStr}`;
           google.script.run
             .withSuccessHandler((res) => {
               showToast(res.message);
-              appData.subLocationsMap = appData.subLocationsMap || {};
-              const knownSubLocations = appData.subLocationsMap[loc] || [];
-              if (!knownSubLocations.some((name) => String(name).trim().toLowerCase() === subLoc.toLowerCase())) {
-                appData.subLocationsMap[loc] = [...knownSubLocations, subLoc];
-              }
               document.getElementById('saleItemsList').innerHTML = '';
               addSaleItemRow();
               document.getElementById('saleNotes').value = '';
@@ -2043,10 +2632,12 @@ ${bookListStr}`;
         // Add Volunteer Submit (Admin Feature)
         document.getElementById('btnAddVolunteerSubmit').addEventListener('click', () => {
           const name = document.getElementById('newVolName').value.trim();
+          const username = document.getElementById('newVolUsername').value.trim();
           const email = document.getElementById('newVolEmail').value.trim();
           const role = document.getElementById('newVolRole').value;
 
           if (!name) { showToast('Please enter Volunteer Name.', false); return; }
+          if (!username) { showToast('Please enter a username.', false); return; }
           if (!email || !email.includes('@')) { showToast('Please enter a valid Gmail address.', false); return; }
 
           showToast('Registering volunteer...');
@@ -2054,11 +2645,12 @@ ${bookListStr}`;
             .withSuccessHandler((res) => {
               showToast(res.message);
               document.getElementById('newVolName').value = '';
+              document.getElementById('newVolUsername').value = '';
               document.getElementById('newVolEmail').value = '';
               google.script.run.withSuccessHandler(onLookupLoaded).getLookupData(getSessionToken());
             })
             .withFailureHandler((err) => showToast(err.message, false))
-            .addVolunteer({ name: name, email: email, role: role }, getSessionToken());
+            .addVolunteer({ name: name, username: username, email: email, role: role }, getSessionToken());
         });
 
         document.getElementById('btnChangePin').addEventListener('click', () => {

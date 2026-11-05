@@ -66,8 +66,8 @@ function ensureSheetsExist() {
   const defaultHeaders = {
     Books: ['bookId', 'bookName', 'category', 'language', 'active'],
     Locations: ['locationId', 'locationName', 'monthlyTarget', 'active'],
-    Volunteers: ['volunteerId', 'name', 'email', 'role', 'pin', 'active'],
-    Events: ['eventId', 'location', 'subLocation', 'date', 'volunteers', 'interactions', 'durationHours', 'booksDistributed', 'appInstalls', 'status'],
+    Volunteers: ['volunteerId', 'name', 'email', 'role', 'pin', 'active', 'username'],
+    Events: ['eventId', 'location', 'subLocation', 'date', 'volunteers', 'interactions', 'durationHours', 'booksDistributed', 'appInstalls', 'status', 'startTime'],
     Stock: ['stockId', 'bookName', 'volunteerName', 'quantityReceived', 'quantityRemaining'],
     Sales: ['saleId', 'timestamp', 'bookName', 'eventId', 'location', 'subLocation', 'sellerName', 'stockOwnerName', 'quantity', 'unitPrice', 'recordedBy', 'notes']
   };
@@ -88,6 +88,8 @@ function ensureSheetsExist() {
     }
   });
 
+  backfillUsernames_();
+
   const locSheet = getSheetByName(SHEET_NAMES.locations);
   if (locSheet.getLastRow() <= 1) {
     const defaultLocs = [
@@ -107,20 +109,38 @@ function ensureSheetsExist() {
 // PIN AUTHENTICATION & SESSION MANAGEMENT
 // =============================================================================
 
-function getVolunteersForLogin() {
-  ensureSheetsExist();
-  const rows = getAllRows(SHEET_NAMES.volunteers);
+function normalizeUsername_(value) {
+  return String(value || '').trim().toLowerCase();
+}
 
-  return rows
-    .filter((v) => {
-      const act = String(v.active ?? 'true').trim().toLowerCase();
-      return !['0', 'false', 'no', 'inactive'].includes(act);
-    })
-    .map((v) => ({
-      volunteerId: String(v.volunteerId || ''),
-      name: String(v.name || '').trim()
-    }))
-    .sort((a, b) => a.name.localeCompare(b.name));
+// Existing volunteers get a username derived from email (or name) so they can log in.
+function backfillUsernames_() {
+  const sheet = getSheetByName(SHEET_NAMES.volunteers);
+  const data = sheet.getDataRange().getValues();
+  if (data.length <= 1) return;
+  const headers = data[0].map((h) => String(h || '').trim().toLowerCase());
+  const userIdx = headers.indexOf('username');
+  const emailIdx = headers.indexOf('email');
+  const nameIdx = headers.indexOf('name');
+  if (userIdx === -1) return;
+
+  const taken = new Set();
+  for (let i = 1; i < data.length; i++) {
+    const existing = normalizeUsername_(data[i][userIdx]);
+    if (existing) taken.add(existing);
+  }
+
+  for (let i = 1; i < data.length; i++) {
+    if (normalizeUsername_(data[i][userIdx])) continue;
+    const email = emailIdx === -1 ? '' : String(data[i][emailIdx] || '');
+    const base = (email.split('@')[0] || (nameIdx === -1 ? '' : String(data[i][nameIdx] || '')))
+      .toLowerCase().replace(/[^a-z0-9._-]/g, '') || 'user' + i;
+    let candidate = base;
+    let suffix = 2;
+    while (taken.has(candidate)) candidate = base + suffix++;
+    taken.add(candidate);
+    sheet.getRange(i + 1, userIdx + 1).setValue(candidate);
+  }
 }
 
 function createSessionToken(volunteerId) {
@@ -148,16 +168,17 @@ function createSessionToken(volunteerId) {
   return token;
 }
 
-function verifyVolunteerPin(volunteerId, inputPin) {
+function loginWithCredentials(username, inputPin) {
   ensureSheetsExist();
   const rows = getAllRows(SHEET_NAMES.volunteers);
-  const targetId = String(volunteerId || '').trim();
+  const targetUsername = normalizeUsername_(username);
   const pinEntered = String(inputPin || '').trim();
 
-  const user = rows.find((v) => String(v.volunteerId || '').trim() === targetId);
+  const user = targetUsername && rows.find((v) => normalizeUsername_(v.username) === targetUsername);
+  const targetId = user ? String(user.volunteerId || '').trim() : '';
 
   if (!user) {
-    return { success: false, message: 'Volunteer profile not found.' };
+    return { success: false, message: 'Invalid username or PIN.' };
   }
 
   const actVal = String(user.active ?? 'true').trim().toLowerCase();
@@ -168,9 +189,10 @@ function verifyVolunteerPin(volunteerId, inputPin) {
   const storedPin = String(user.pin !== undefined && user.pin !== null ? user.pin : '').trim();
 
   if (!storedPin) {
-    updateVolunteerPinInSheet_(targetId, pinEntered);
-  } else if (storedPin !== pinEntered) {
-    return { success: false, message: 'Incorrect PIN. Please try again.' };
+    return { success: false, message: 'No PIN is set for this account. Contact admin.' };
+  }
+  if (storedPin !== pinEntered) {
+    return { success: false, message: 'Invalid username or PIN.' };
   }
 
   const role = String(user.role || 'user').trim().toLowerCase();
@@ -337,6 +359,7 @@ function getLookupData(sessionToken) {
   const safeAllVolunteers = allVolunteers.map((v) => ({
     volunteerId: String(v.volunteerId || ''),
     name: String(v.name || ''),
+    username: String(v.username || ''),
     email: String(v.email || ''),
     role: String(v.role || 'user').toLowerCase(),
     active: !['0', 'false', 'no', 'inactive'].includes(String(v.active ?? 'true').trim().toLowerCase())
@@ -365,6 +388,18 @@ function getLookupData(sessionToken) {
   return {
     currentUser: currentUser,
     books: activeBooks,
+    events: allEvents
+      .map((ev) => ({
+        eventId: String(ev.eventId || '').trim(),
+        location: String(ev.location || '').trim(),
+        subLocation: String(ev.subLocation || '').trim(),
+        date: normalizeEventDate(ev.date),
+        startTime: normalizeEventTime_(ev.startTime),
+        volunteers: String(ev.volunteers || '').trim(),
+        status: String(ev.status || '').trim().toLowerCase()
+      }))
+      .filter((ev) => ev.eventId && ev.date)
+      .sort((a, b) => b.date.localeCompare(a.date)),
     volunteers: activeVolunteers,
     allVolunteers: safeAllVolunteers,
     locations: activeLocations,
@@ -394,6 +429,14 @@ function normalizeEventDate(value) {
     : Utilities.formatDate(parsedDate, Session.getScriptTimeZone(), 'yyyy-MM-dd');
 }
 
+function normalizeEventTime_(value) {
+  if (value instanceof Date && !isNaN(value.getTime())) {
+    return Utilities.formatDate(value, Session.getScriptTimeZone(), 'HH:mm');
+  }
+  const match = String(value || '').trim().match(/^(\d{1,2}):(\d{2})/);
+  return match ? match[1].padStart(2, '0') + ':' + match[2] : '';
+}
+
 function createOrFindEvent(location, subLocation, date) {
   const eventsSheet = getSheetByName(SHEET_NAMES.events);
   const values = eventsSheet.getDataRange().getValues();
@@ -414,7 +457,10 @@ function createOrFindEvent(location, subLocation, date) {
     String(row[subLocIdx] || '').trim().toLowerCase() === subLoc.toLowerCase());
 
   if (matchedIndex !== -1) {
-    if (statusIdx !== -1) eventsSheet.getRange(matchedIndex + 1, statusIdx + 1).setValue('live');
+    const existingStatus = statusIdx === -1 ? '' : String(values[matchedIndex][statusIdx] || '').trim().toLowerCase();
+    if (statusIdx !== -1 && existingStatus !== 'completed') {
+      eventsSheet.getRange(matchedIndex + 1, statusIdx + 1).setValue('live');
+    }
     return String(values[matchedIndex][eventIdIdx] || '');
   }
 
@@ -435,20 +481,75 @@ function createOrFindEvent(location, subLocation, date) {
   return eventId;
 }
 
-function saveEventSummary(summaryData) {
+function createEvent(eventData, sessionToken) {
   ensureSheetsExist();
-  const location = String(summaryData.location || '').trim();
-  const subLocation = String(summaryData.subLocation || '').trim();
-  const date = String(summaryData.date || '').trim();
+  if (!validateSessionToken(sessionToken)) {
+    throw new Error('Your session has expired. Please log in again.');
+  }
+
+  const location = String((eventData && eventData.location) || '').trim();
+  const subLocation = String((eventData && eventData.subLocation) || '').trim();
+  const date = normalizeEventDate(eventData && eventData.date);
+  if (!location) throw new Error('Major Location is required.');
+  if (!subLocation) throw new Error('Sub-Location / Landmark is required.');
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) throw new Error('A valid event date is required.');
+
+  const startTime = normalizeEventTime_(eventData && eventData.startTime);
+  const rawVolunteers = eventData && eventData.volunteers;
+  const volunteers = Array.isArray(rawVolunteers)
+    ? rawVolunteers.map((name) => String(name || '').trim()).filter(Boolean).join(', ')
+    : String(rawVolunteers || '').trim();
+
+  const eventId = createOrFindEvent(location, subLocation, date);
+  const found = findEventRowById_(eventId);
+  const rowNumber = found.rowIndex + 1;
+  const writeCell = (col, val, asText) => {
+    const idx = found.headers.indexOf(col);
+    if (idx === -1 || !val) return;
+    const range = found.sheet.getRange(rowNumber, idx + 1);
+    // Plain-text format stops Sheets turning "09:30" into a time value.
+    if (asText) range.setNumberFormat('@');
+    range.setValue(val);
+  };
+  writeCell('starttime', startTime, true);
+  writeCell('volunteers', volunteers, false);
+  const statusIdx = found.headers.indexOf('status');
+  const status = statusIdx === -1 ? 'live' : String(found.values[found.rowIndex][statusIdx] || 'live').trim().toLowerCase();
+
+  return {
+    success: true,
+    event: {
+      eventId: eventId, location: location, subLocation: subLocation, date: date,
+      startTime: startTime || normalizeEventTime_(found.values[found.rowIndex][found.headers.indexOf('starttime')]),
+      volunteers: volunteers || String(found.values[found.rowIndex][found.headers.indexOf('volunteers')] || '').trim(),
+      status: status
+    },
+    message: `Bookstall ready: ${subLocation}, ${location} on ${date}.`
+  };
+}
+
+function findEventRowById_(eventId) {
+  const eventsSheet = getSheetByName(SHEET_NAMES.events);
+  const values = eventsSheet.getDataRange().getValues();
+  const headers = values[0].map((h) => String(h || '').trim().toLowerCase());
+  const idIdx = headers.indexOf('eventid');
+  const targetId = String(eventId || '').trim();
+  const rowIndex = targetId ? values.findIndex((row, i) => i > 0 && String(row[idIdx] || '').trim() === targetId) : -1;
+  return { sheet: eventsSheet, values: values, headers: headers, rowIndex: rowIndex };
+}
+
+function saveEventSummary(summaryData, sessionToken) {
+  ensureSheetsExist();
+  if (!validateSessionToken(sessionToken)) {
+    throw new Error('Your session has expired. Please log in again.');
+  }
+
   const volunteers = String(summaryData.volunteers || '').trim();
   const interactions = String(summaryData.interactions || '').trim();
   const durationHours = summaryData.durationHours === '' || summaryData.durationHours == null ? '' : Number(summaryData.durationHours);
   const booksDistributed = Number(summaryData.booksDistributed || 0);
   const appInstalls = Number(summaryData.appInstalls || 0);
 
-  if (!location) throw new Error('Location is required.');
-  if (!subLocation) throw new Error('Sub-location is required.');
-  if (!date) throw new Error('Date is required.');
   if (durationHours !== '' && (!Number.isFinite(durationHours) || durationHours < 0)) {
     throw new Error('Duration must be a non-negative number of hours.');
   }
@@ -456,61 +557,27 @@ function saveEventSummary(summaryData) {
     throw new Error('Books distributed must be a non-negative whole number.');
   }
 
-  const eventsSheet = getSheetByName(SHEET_NAMES.events);
-  const values = eventsSheet.getDataRange().getValues();
+  const found = findEventRowById_(summaryData.eventId);
+  if (found.rowIndex === -1) throw new Error('Event not found. Create the event first.');
 
-  const headers = values[0].map((h) => String(h || '').trim().toLowerCase());
-  const locIdx = headers.indexOf('location');
-  const subLocIdx = headers.indexOf('sublocation');
-  const dateIdx = headers.indexOf('date');
-  const volIdx = headers.indexOf('volunteers');
-  const intIdx = headers.indexOf('interactions');
-  const durationHoursIdx = headers.indexOf('durationhours');
-  const booksDistributedIdx = headers.indexOf('booksdistributed');
-  const appIdx = headers.indexOf('appinstalls');
-  const statusIdx = headers.indexOf('status');
-
-  const matchedIndex = values.findIndex((row, index) => index > 0 &&
-    String(row[locIdx] || '').trim().toLowerCase() === location.toLowerCase() &&
-    String(row[subLocIdx] || '').trim().toLowerCase() === subLocation.toLowerCase() &&
-    normalizeEventDate(row[dateIdx]) === normalizeEventDate(date));
-
-  if (matchedIndex !== -1) {
-    const matchedRowIndex = matchedIndex + 1;
-    if (volIdx !== -1) eventsSheet.getRange(matchedRowIndex, volIdx + 1).setValue(volunteers);
-    if (intIdx !== -1) eventsSheet.getRange(matchedRowIndex, intIdx + 1).setValue(interactions);
-    if (durationHoursIdx !== -1) eventsSheet.getRange(matchedRowIndex, durationHoursIdx + 1).setValue(durationHours);
-    if (booksDistributedIdx !== -1) eventsSheet.getRange(matchedRowIndex, booksDistributedIdx + 1).setValue(booksDistributed);
-    if (appIdx !== -1) eventsSheet.getRange(matchedRowIndex, appIdx + 1).setValue(appInstalls);
-    if (statusIdx !== -1) eventsSheet.getRange(matchedRowIndex, statusIdx + 1).setValue('completed');
-
-    return {
-      success: true,
-      eventId: String(values[matchedIndex][headers.indexOf('eventid')] || ''),
-      message: `Updated stall event (${location} - ${subLocation} on ${date}).`
-    };
-  }
-
-  const eventId = 'E-' + Date.now();
-  const newRow = new Array(headers.length).fill('');
-  const setCell = (col, val) => {
-    const idx = headers.indexOf(col.toLowerCase());
-    if (idx !== -1) newRow[idx] = val;
+  const { sheet, values, headers, rowIndex } = found;
+  const rowNumber = rowIndex + 1;
+  const setIfPresent = (col, val) => {
+    const idx = headers.indexOf(col);
+    if (idx !== -1) sheet.getRange(rowNumber, idx + 1).setValue(val);
   };
+  setIfPresent('volunteers', volunteers);
+  setIfPresent('interactions', interactions);
+  setIfPresent('durationhours', durationHours);
+  setIfPresent('booksdistributed', booksDistributed);
+  setIfPresent('appinstalls', appInstalls);
+  setIfPresent('status', 'completed');
 
-  setCell('eventid', eventId);
-  setCell('location', location);
-  setCell('sublocation', subLocation);
-  setCell('date', date);
-  setCell('volunteers', volunteers);
-  setCell('interactions', interactions);
-  setCell('durationhours', durationHours);
-  setCell('booksdistributed', booksDistributed);
-  setCell('appinstalls', appInstalls);
-  setCell('status', 'completed');
-
-  eventsSheet.appendRow(newRow);
-  return { success: true, eventId: eventId, message: `Created new event for ${location} - ${subLocation}.` };
+  return {
+    success: true,
+    eventId: String(values[rowIndex][headers.indexOf('eventid')] || ''),
+    message: 'Event summary saved.'
+  };
 }
 
 function recordMultiItemSale(payload, sessionToken) {
@@ -525,16 +592,17 @@ function recordMultiItemSale(payload, sessionToken) {
     throw new Error('Please add at least one book to record a transaction.');
   }
 
-  const location = String(payload.location || '').trim();
-  const subLocation = String(payload.subLocation || '').trim();
-  const date = String(payload.eventDate || '').trim();
+  const found = findEventRowById_(payload.eventId);
+  if (found.rowIndex === -1) throw new Error('Select an event. Create the event first if it does not exist.');
+  const eventRow = found.values[found.rowIndex];
+  const eventCell = (col) => String(eventRow[found.headers.indexOf(col)] || '').trim();
+  const eventId = eventCell('eventid');
+  const location = eventCell('location');
+  const subLocation = eventCell('sublocation');
   const seller = String(payload.sellerName || '').trim();
   const recordedBy = currentUser.name;
   const notes = String(payload.notes || '').trim();
 
-  if (!location) throw new Error('Major Location is required.');
-  if (!subLocation) throw new Error('Sub-Location / Landmark is mandatory.');
-  if (!date) throw new Error('Event date is required.');
   if (!seller) throw new Error('Seller (Volunteer) is required.');
 
   payload.items.forEach((item, index) => {
@@ -546,8 +614,6 @@ function recordMultiItemSale(payload, sessionToken) {
     if (!Number.isInteger(qty) || qty <= 0) throw new Error(`Item #${index + 1} (${book}): Quantity must be at least 1.`);
     if (!Number.isFinite(price) || price < 0) throw new Error(`Item #${index + 1} (${book}): Unit price must be valid.`);
   });
-
-  const eventId = createOrFindEvent(location, subLocation, date);
 
   const salesSheet = getSheetByName(SHEET_NAMES.sales);
   const values = salesSheet.getDataRange().getValues();
@@ -1131,11 +1197,13 @@ function addVolunteer(volunteerData, sessionToken) {
 
   ensureSheetsExist();
   const name = String(volunteerData.name || '').trim();
+  const username = normalizeUsername_(volunteerData.username);
   const email = String(volunteerData.email || '').trim().toLowerCase();
   const role = String(volunteerData.role || 'user').trim().toLowerCase();
   const initialPin = '1234';
 
   if (!name) throw new Error('Volunteer Name is required.');
+  if (!/^[a-z0-9._-]{3,30}$/.test(username)) throw new Error('Username must be 3-30 characters: letters, numbers, dot, dash or underscore.');
   if (!email || !email.includes('@')) throw new Error('A valid Gmail/Email address is required.');
 
   const volSheet = getSheetByName(SHEET_NAMES.volunteers);
@@ -1143,12 +1211,21 @@ function addVolunteer(volunteerData, sessionToken) {
 
   const exists = rows.some((r) => String(r.email || '').trim().toLowerCase() === email);
   if (exists) throw new Error(`A volunteer with email "${email}" is already registered.`);
+  if (rows.some((r) => normalizeUsername_(r.username) === username)) throw new Error(`Username "${username}" is already taken.`);
 
   const nextNum = volSheet.getLastRow();
   const volId = 'VOL' + String(nextNum).padStart(3, '0');
 
-  volSheet.appendRow([volId, name, email, role, initialPin, 'True']);
-  return { success: true, message: `Volunteer "${name}" added successfully. Initial PIN is 1234; they can change it after signing in.` };
+  const sheetHeaders = volSheet.getRange(1, 1, 1, volSheet.getLastColumn()).getValues()[0]
+    .map((h) => String(h || '').trim().toLowerCase());
+  const newRow = new Array(sheetHeaders.length).fill('');
+  const values = { volunteerid: volId, name: name, email: email, role: role, pin: initialPin, active: 'True', username: username };
+  Object.entries(values).forEach(([col, val]) => {
+    const idx = sheetHeaders.indexOf(col);
+    if (idx !== -1) newRow[idx] = val;
+  });
+  volSheet.appendRow(newRow);
+  return { success: true, message: `Volunteer "${name}" added. Username: ${username}, initial PIN: 1234 (they can change it after signing in).` };
 }
 
 function updateOwnVolunteerPin(currentPin, newPin, sessionToken) {
