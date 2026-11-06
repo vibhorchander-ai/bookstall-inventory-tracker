@@ -843,6 +843,8 @@
       input[type="date"]::-webkit-calendar-picker-indicator,
       input[type="time"]::-webkit-calendar-picker-indicator,
       input[type="month"]::-webkit-calendar-picker-indicator { margin: 0 0 0 auto; }
+
+      #editSaleModal .login-card { max-height: 92vh; overflow-y: auto; }
     </style>
   </head>
 
@@ -881,16 +883,52 @@
           <input id="currentPinInput" type="password" inputmode="numeric" maxlength="6" autocomplete="current-password" />
         </div>
         <div class="field">
-          <label for="newPinInput">New PIN (4-6 digits)</label>
-          <input id="newPinInput" type="password" inputmode="numeric" maxlength="6" autocomplete="new-password" />
+          <label for="newPinInput">New PIN (exactly 4 digits)</label>
+          <input id="newPinInput" type="password" inputmode="numeric" maxlength="4" pattern="[0-9]{4}" autocomplete="new-password" />
         </div>
         <div class="field">
           <label for="confirmNewPinInput">Confirm new PIN</label>
-          <input id="confirmNewPinInput" type="password" inputmode="numeric" maxlength="6" autocomplete="new-password" />
+          <input id="confirmNewPinInput" type="password" inputmode="numeric" maxlength="4" pattern="[0-9]{4}" autocomplete="new-password" />
         </div>
         <div style="display: flex; justify-content: flex-end; gap: 8px;">
           <button type="button" id="btnCancelPinChange" class="target-save-btn">Cancel</button>
           <button type="button" id="btnSubmitPinChange" class="btn-primary">Update PIN</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="editSaleModal" class="login-modal-overlay" style="display: none;">
+      <div class="login-card" style="text-align: left;">
+        <h2>Edit Sale</h2>
+        <p id="editSaleMeta" style="margin-bottom: 14px;"></p>
+        <div class="field">
+          <label for="editSaleBook">Book Title *</label>
+          <div class="typeahead-wrap">
+            <input id="editSaleBook" type="text" class="typeahead-input" autocomplete="off" />
+            <div class="typeahead-dropdown" id="editSaleDropdown"></div>
+          </div>
+        </div>
+        <div class="grid-2">
+          <div class="field">
+            <label for="editSaleQty">Quantity *</label>
+            <input id="editSaleQty" type="number" min="1" />
+          </div>
+          <div class="field">
+            <label for="editSalePrice">Unit Price (₹) *</label>
+            <input id="editSalePrice" type="number" min="0" />
+          </div>
+        </div>
+        <div class="field">
+          <label for="editSaleSeller">Sold By *</label>
+          <select id="editSaleSeller"></select>
+        </div>
+        <div class="field">
+          <label for="editSaleNotes">Notes</label>
+          <textarea id="editSaleNotes" rows="2"></textarea>
+        </div>
+        <div style="display: flex; justify-content: flex-end; gap: 8px;">
+          <button type="button" id="btnCancelEditSale" class="target-save-btn">Cancel</button>
+          <button type="button" id="btnSaveEditSale" class="btn-primary">Save Changes</button>
         </div>
       </div>
     </div>
@@ -1219,6 +1257,7 @@
                     <th>Seller</th>
                     <th>Recorded By</th>
                     <th>Notes</th>
+                    <th>Actions</th>
                   </tr>
                 </thead>
                 <tbody></tbody>
@@ -1423,13 +1462,13 @@
       let allPriceInsights = [];
       let inventoryRows = [];
       let salesSummaryPeriod = 'month';
-      let allSalesRecords = null;
       const DATA_CACHE_TTL_MS = 2 * 60 * 1000;
       const dataCache = new Map();
       const SESSION_STORAGE_KEY = 'cc_stall_user_sessions';
       const ACTIVE_SESSION_USER_KEY = 'cc_stall_active_session_user';
       const LEGACY_SESSION_STORAGE_KEY = 'cc_stall_user_session_token';
       const LAST_SALE_LOCATION_KEY = 'cc_stall_last_sale_location';
+      const LOOKUP_CACHE_KEY = 'cc_stall_lookup_cache';
 
       function getStoredSessions() {
         try {
@@ -1460,6 +1499,23 @@
         localStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(sessions));
         localStorage.removeItem(ACTIVE_SESSION_USER_KEY);
         localStorage.removeItem(LEGACY_SESSION_STORAGE_KEY);
+        localStorage.removeItem(LOOKUP_CACHE_KEY);
+      }
+
+      // Last lookup payload lets the app paint instantly while fresh data loads.
+      function readLookupCache() {
+        try {
+          const cached = JSON.parse(localStorage.getItem(LOOKUP_CACHE_KEY) || 'null');
+          return cached && cached.currentUser ? cached : null;
+        } catch (e) {
+          return null;
+        }
+      }
+
+      function writeLookupCache(lookup) {
+        try {
+          if (lookup && lookup.currentUser) localStorage.setItem(LOOKUP_CACHE_KEY, JSON.stringify(lookup));
+        } catch (e) { /* storage full or unavailable */ }
       }
 
       function getCachedData(key) {
@@ -1538,6 +1594,9 @@
       }
 
       function showToast(msg, isSuccess = true) {
+        if (!isSuccess && /session has expired/i.test(String(msg))) {
+          resetToLoginScreen();
+        }
         let host = document.getElementById('toastHost');
         if (!host) {
           host = document.createElement('div');
@@ -1569,7 +1628,6 @@
         }
         if (pageId === 'page-summary') {
           refreshEventSelect('sumDate', 'sumEvent');
-          loadSummarySales();
           redirectIfNoBookstall('sumDate');
         }
         if (pageId === 'page-targets') loadTargets();
@@ -1630,7 +1688,11 @@
 
         const existingToken = getSessionToken();
         if (existingToken) {
-          loadAppDataWithToken(existingToken);
+          const cachedLookup = readLookupCache();
+          const activeUserId = localStorage.getItem(ACTIVE_SESSION_USER_KEY);
+          const renderedFromCache = Boolean(cachedLookup && String(cachedLookup.currentUser.volunteerId) === String(activeUserId));
+          if (renderedFromCache) onLookupLoaded(cachedLookup);
+          loadAppDataWithToken(existingToken, renderedFromCache);
         } else {
           showLoginModal();
         }
@@ -1641,17 +1703,43 @@
         document.getElementById('loginUsernameInput').focus();
       }
 
-      function loadAppDataWithToken(token) {
+      // Reloading the page inside the Apps Script frame can leave a blank screen, so reset in place.
+      function resetToLoginScreen() {
+        clearActiveSession();
+        dataCache.clear();
+        appData = { currentUser: null, books: [], volunteers: [], locations: [], subLocationsMap: {}, events: [], historyRecords: [] };
+        inventoryRows = [];
+        allPriceInsights = [];
+        document.querySelector('.user-badge').classList.remove('open');
+        document.getElementById('lblUserName').textContent = '—';
+        document.getElementById('lblAvatar').textContent = '?';
+        document.querySelectorAll('.admin-only').forEach((el) => (el.style.display = 'none'));
+        document.getElementById('salesSummarySection').style.display = 'none';
+        ['historyTable', 'invTable', 'volunteersTable', 'priceInsightsTable'].forEach((id) => {
+          const tbody = document.querySelector('#' + id + ' tbody');
+          if (tbody) tbody.innerHTML = '';
+        });
+        document.getElementById('activeBookstallsContainer').innerHTML = '';
+        document.getElementById('locationTargetsContainer').innerHTML = '';
+        document.getElementById('summaryOutputWrapper').style.display = 'none';
+        document.getElementById('changePinModal').style.display = 'none';
+        document.getElementById('editSaleModal').style.display = 'none';
+        document.getElementById('loginUsernameInput').value = '';
+        document.getElementById('loginPinInput').value = '';
+        showPage('page-event');
+        showLoginModal();
+      }
+
+      function loadAppDataWithToken(token, keepForm) {
         google.script.run
           .withSuccessHandler((res) => {
             if (!res.currentUser) {
-              clearActiveSession();
-              showLoginModal();
+              resetToLoginScreen();
               return;
             }
             storeSessionToken(token, res.currentUser.volunteerId);
             document.getElementById('loginModal').style.display = 'none';
-            onLookupLoaded(res);
+            onLookupLoaded(res, { keepForm: keepForm });
           })
           .withFailureHandler((err) => {
             showToast('Failed to load: ' + err.message, false);
@@ -1660,8 +1748,13 @@
           .getLookupData(token);
       }
 
-      function onLookupLoaded(res) {
+      function onLookupLoaded(res, options) {
+        if (!res || !res.currentUser) {
+          resetToLoginScreen();
+          return;
+        }
         appData = res;
+        writeLookupCache(res);
         const u = res.currentUser;
 
         document.getElementById('lblUserName').textContent = u.name;
@@ -1689,8 +1782,10 @@
         refreshEventSelect('saleDate', 'saleEvent');
         refreshEventSelect('sumDate', 'sumEvent');
         renderActiveBookstalls();
-        document.getElementById('saleItemsList').innerHTML = '';
-        addSaleItemRow();
+        if (!(options && options.keepForm) || !document.querySelector('.item-row')) {
+          document.getElementById('saleItemsList').innerHTML = '';
+          addSaleItemRow();
+        }
         renderVolunteersTable();
         initSingleStockTypeahead();
       }
@@ -1897,6 +1992,184 @@
         else if (events.length === 1) select.value = events[0].eventId;
       }
 
+      function escapeHtml(value) {
+        return String(value == null ? '' : value)
+          .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+          .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+      }
+
+      // ---- Book search: matches English, Hindi and common spellings of the same title ----
+      // Consonant-only phonetic key: "Bhagwad Gita", "Bhagavad Geeta" and "भगवद गीता" all reduce to "bgvdgt".
+      const DEVANAGARI_KEY = {
+        'क': 'k', 'ख': 'k', 'ग': 'g', 'घ': 'g', 'ङ': 'n', 'च': 'k', 'छ': 'k', 'ज': 'j', 'झ': 'j', 'ञ': 'n',
+        'ट': 't', 'ठ': 't', 'ड': 'd', 'ढ': 'd', 'ण': 'n', 'त': 't', 'थ': 't', 'द': 'd', 'ध': 'd', 'न': 'n',
+        'प': 'p', 'फ': 'p', 'ब': 'b', 'भ': 'b', 'म': 'm', 'य': 'y', 'र': 'r', 'ल': 'l', 'व': 'v',
+        'श': 's', 'ष': 's', 'स': 's', 'ऋ': 'r', 'ं': 'n', 'ँ': 'n',
+        '\u0958': 'k', '\u0959': 'k', '\u095A': 'g', '\u095B': 'j', '\u095C': 'd', '\u095D': 'd', '\u095E': 'p', '\u095F': 'y'
+      };
+
+      function phoneticKey(text) {
+        const source = String(text || '').toLowerCase().replace(/ज्ञ/g, 'gy').replace(/क्ष/g, 'ks');
+        let out = '';
+        for (const ch of source) {
+          const code = ch.charCodeAt(0);
+          out += code >= 0x0900 && code <= 0x097f ? (DEVANAGARI_KEY[ch] || '') : ch;
+        }
+        return out
+          .replace(/[^a-z0-9]/g, '')
+          .replace(/w/g, 'v').replace(/[cq]/g, 'k').replace(/x/g, 'ks').replace(/z/g, 'j').replace(/f/g, 'p')
+          .replace(/[aeiouh]/g, '')
+          .replace(/(.)\1+/g, '$1');
+      }
+
+      // Titles whose Hindi and English names differ in meaning, not just spelling.
+      const BOOK_SEARCH_GROUPS = [
+        ['bhagavad gita', 'bhagwad gita', 'bhagwat geeta', 'gita', 'geeta', 'भगवद गीता', 'भगवद्गीता', 'गीता'],
+        ['upanishad', 'upanishads', 'उपनिषद', 'उपनिषद्'],
+        ['katha upanishad', 'kathopanishad', 'kathoupanishad', 'कठोपनिषद', 'कठ उपनिषद'],
+        ['kena upanishad', 'kenopanishad', 'केनोपनिषद'],
+        ['isha upanishad', 'ishavasya', 'ishopanishad', 'ईशावास्य', 'ईशोपनिषद'],
+        ['mundaka upanishad', 'mundakopanishad', 'मुण्डकोपनिषद', 'मुंडकोपनिषद'],
+        ['ashtavakra', 'ashtavakra gita', 'अष्टावक्र', 'अष्टावक्र गीता'],
+        ['woman', 'women', 'womens revolution', 'stree', 'स्त्री', 'नारी'],
+        ['fear', 'darr', 'डर', 'भय'],
+        ['mother', 'maa', 'माँ', 'माता'],
+        ['time', 'samay', 'समय'],
+        ['struggle', 'sangharsh', 'संघर्ष'],
+        ['joyful relationships', 'relationships', 'rishte', 'रिश्ते', 'रिश्ता'],
+        ['kabir', 'कबीर'],
+        ['ramayana', 'ramayan', 'रामायण'],
+        ['mahabharata', 'mahabharat', 'महाभारत'],
+        ['vedanta', 'वेदांत', 'वेदान्त'],
+        ['death', 'mrityu', 'मृत्यु'],
+        ['love', 'prem', 'प्रेम'],
+        ['meditation', 'dhyan', 'ध्यान'],
+        ['truth', 'satya', 'सत्य'],
+        ['freedom', 'mukti', 'azadi', 'मुक्ति', 'आज़ादी'],
+        ['education', 'shiksha', 'शिक्षा'],
+        ['ego', 'ahankar', 'अहंकार']
+      ];
+
+      let searchGroups = null;
+      let bookIndex = [];
+      let bookIndexSource = null;
+
+      function getSearchGroups() {
+        if (!searchGroups) {
+          searchGroups = BOOK_SEARCH_GROUPS.map((terms) => ({ terms: terms, keys: terms.map(phoneticKey) }));
+        }
+        return searchGroups;
+      }
+
+      function ensureBookIndex() {
+        if (bookIndexSource === appData.books) return;
+        bookIndexSource = appData.books;
+        bookIndex = (appData.books || []).map((book) => {
+          const text = `${book.bookName} ${book.aliases || ''}`;
+          const words = text.split(/[\s,;:()\/\-–]+/).filter(Boolean);
+          return { book: book, text: text.toLowerCase(), key: phoneticKey(text), wordKeys: words.map(phoneticKey).filter(Boolean) };
+        });
+      }
+
+      function bookMatchesTerm(entry, term) {
+        const t = String(term || '').toLowerCase().trim();
+        if (!t) return true;
+        if (entry.text.includes(t)) return true;
+        const key = phoneticKey(t);
+        if (!key) return false;
+        if (key.length >= 3 && entry.key.includes(key)) return true;
+        return entry.wordKeys.includes(key);
+      }
+
+      function expandSearchTerms(raw) {
+        const q = raw.toLowerCase().trim();
+        const qKey = phoneticKey(q);
+        const terms = new Set([raw]);
+        getSearchGroups().forEach((group) => {
+          const hit = group.terms.some((term, i) => {
+            const t = term.toLowerCase();
+            const k = group.keys[i];
+            return t === q
+              || (q.length >= 4 && t.includes(q))
+              || (qKey && k === qKey)
+              || (qKey.length >= 3 && k.length >= 3 && k.includes(qKey));
+          });
+          if (hit) group.terms.forEach((term) => terms.add(term));
+        });
+        return Array.from(terms);
+      }
+
+      function searchBooks(query) {
+        const raw = String(query || '').trim();
+        const books = appData.books || [];
+        if (!raw) return books.slice(0, 40);
+        ensureBookIndex();
+        const direct = bookIndex.filter((entry) => bookMatchesTerm(entry, raw));
+        const directSet = new Set(direct);
+        const extraTerms = expandSearchTerms(raw).filter((t) => t !== raw);
+        const related = extraTerms.length
+          ? bookIndex.filter((entry) => !directSet.has(entry) && extraTerms.some((t) => bookMatchesTerm(entry, t)))
+          : [];
+        return [...direct, ...related].map((entry) => entry.book).slice(0, 40);
+      }
+
+      function attachBookTypeahead(input, dropdown) {
+        const render = () => {
+          dropdown.innerHTML = '';
+          const matches = searchBooks(input.value);
+          if (!matches.length) {
+            dropdown.innerHTML = '<div style="padding:10px; color:var(--muted); font-size:12px;">No matching books found</div>';
+          }
+          matches.forEach((b) => {
+            const div = document.createElement('div');
+            div.className = 'typeahead-item';
+            div.textContent = b.bookName;
+            div.addEventListener('click', (e) => {
+              e.stopPropagation();
+              input.value = b.bookName;
+              dropdown.style.display = 'none';
+            });
+            dropdown.appendChild(div);
+          });
+          dropdown.style.display = 'block';
+        };
+        input.addEventListener('focus', render);
+        input.addEventListener('input', render);
+      }
+
+      // ---- Editing a recorded sale ----
+      let editingSale = null;
+
+      function openEditSaleModal(saleId) {
+        const rec = (appData.historyRecords || []).find((r) => r.saleId === saleId);
+        if (!rec) return;
+        editingSale = rec;
+        document.getElementById('editSaleMeta').textContent =
+          `${rec.date || ''} · ${rec.subLocation ? rec.subLocation + ', ' : ''}${rec.location}`;
+        document.getElementById('editSaleBook').value = rec.bookName;
+        document.getElementById('editSaleQty').value = rec.quantity;
+        document.getElementById('editSalePrice').value = rec.unitPrice;
+        document.getElementById('editSaleNotes').value = rec.notes || '';
+        const sellerSelect = document.getElementById('editSaleSeller');
+        const names = (appData.volunteers || []).map((v) => v.name);
+        if (rec.sellerName && !names.includes(rec.sellerName)) names.push(rec.sellerName);
+        sellerSelect.innerHTML = '';
+        names.forEach((name) => {
+          const option = document.createElement('option');
+          option.value = name;
+          option.textContent = name;
+          sellerSelect.appendChild(option);
+        });
+        sellerSelect.value = rec.sellerName;
+        document.getElementById('editSaleModal').style.display = 'flex';
+      }
+
+      function closeEditSaleModal() {
+        document.getElementById('editSaleModal').style.display = 'none';
+        document.getElementById('editSaleDropdown').style.display = 'none';
+        editingSale = null;
+      }
+
       function addSaleItemRow() {
         const list = document.getElementById('saleItemsList');
         const row = document.createElement('div');
@@ -1931,8 +2204,7 @@
 
         function renderDropdown(filterText = '') {
           dropdown.innerHTML = '';
-          const q = filterText.toLowerCase().trim();
-          const matches = (appData.books || []).filter((b) => !q || b.bookName.toLowerCase().includes(q));
+          const matches = searchBooks(filterText);
 
           if (!matches.length) {
             dropdown.innerHTML = '<div style="padding:10px; color:var(--muted); font-size:12px;">No matching books found</div>';
@@ -2009,7 +2281,7 @@
 
         function render(q = '') {
           dropdown.innerHTML = '';
-          const matches = (appData.books || []).filter((b) => !q || b.bookName.toLowerCase().includes(q.toLowerCase().trim()));
+          const matches = searchBooks(q);
           if (!matches.length) {
             dropdown.innerHTML = '<div style="padding:10px; color:var(--muted); font-size:12px;">No matching books found</div>';
             dropdown.style.display = 'block';
@@ -2062,13 +2334,30 @@
         const formattedDate = new Date(dateRaw + 'T00:00:00')
           .toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
 
-        if (getCachedData('sales:all') === null) {
-          loadSummarySales();
-          showToast('Loading sales data. Please try again shortly.', false);
+        const cachedEventSales = getCachedData('eventSales:' + eventId);
+        if (cachedEventSales === null) {
+          const generateButton = document.getElementById('btnGenerateSummary');
+          const resetLabel = () => {
+            generateButton.disabled = false;
+            generateButton.textContent = '📋 Generate & Save Event Summary';
+          };
+          generateButton.disabled = true;
+          generateButton.textContent = 'Loading sales...';
+          google.script.run
+            .withSuccessHandler((rows) => {
+              setCachedData('eventSales:' + eventId, rows || []);
+              resetLabel();
+              generateInteractionSummary();
+            })
+            .withFailureHandler((err) => {
+              resetLabel();
+              showToast(err.message, false);
+            })
+            .getEventSales(eventId, getSessionToken());
           return;
         }
 
-        const matchedSales = (allSalesRecords || []).filter((s) => s.eventId === eventId);
+        const matchedSales = cachedEventSales;
 
         const bookCounts = {};
         let totalBooks = 0;
@@ -2111,7 +2400,13 @@ ${bookListStr}`;
           .withSuccessHandler((res) => {
             showToast(res.message);
             invalidateCachedData('salesSummary:');
-            google.script.run.withSuccessHandler(onLookupLoaded).getLookupData(getSessionToken());
+            const savedEvent = (appData.events || []).find((e) => e.eventId === eventId);
+            if (savedEvent) {
+              savedEvent.status = 'completed';
+              savedEvent.volunteers = volunteers;
+            }
+            renderActiveBookstalls();
+            writeLookupCache(appData);
           })
           .withFailureHandler((err) => showToast(err.message, false))
           .saveEventSummary({
@@ -2148,7 +2443,7 @@ ${bookListStr}`;
           .withFailureHandler((err) => {
             showToast('Error loading insights: ' + err.message, false);
           })
-          .getLocationAnalyticsAndTargets('');
+          .getLocationAnalyticsAndTargets('', getSessionToken());
       }
 
       function populatePriceLocationFilter() {
@@ -2218,7 +2513,7 @@ ${bookListStr}`;
             setCachedData(cacheKey, targets);
             renderTargets(targets);
           })
-          .getLocationAnalyticsAndTargets(m);
+          .getLocationAnalyticsAndTargets(m, getSessionToken());
       }
 
       function renderTargets(targets) {
@@ -2285,34 +2580,7 @@ ${bookListStr}`;
             setCachedData(cacheKey, appData.historyRecords);
             renderHistoryTable();
           })
-          .getTransactionsHistory(filters);
-      }
-
-      function loadSummarySales() {
-        const button = document.getElementById('btnGenerateSummary');
-        const cachedRows = getCachedData('sales:all');
-        if (cachedRows !== null) {
-          allSalesRecords = cachedRows;
-          button.disabled = false;
-          button.textContent = '📋 Generate & Save Event Summary';
-          return;
-        }
-
-        button.disabled = true;
-        button.textContent = 'Loading sales...';
-        google.script.run
-          .withSuccessHandler((rows) => {
-            allSalesRecords = rows || [];
-            setCachedData('sales:all', allSalesRecords);
-            button.disabled = false;
-            button.textContent = '📋 Generate & Save Event Summary';
-          })
-          .withFailureHandler((err) => {
-            button.disabled = false;
-            button.textContent = '📋 Generate & Save Event Summary';
-            showToast('Failed to load sales for summary: ' + err.message, false);
-          })
-          .getTransactionsHistory({ recordedBy: '', location: '', month: '' });
+          .getTransactionsHistory(filters, getSessionToken());
       }
 
       function renderHistoryTable() {
@@ -2332,25 +2600,31 @@ ${bookListStr}`;
         });
 
         if (!filtered.length) {
-          tbody.innerHTML = '<tr><td colspan="9" style="text-align:center; color:var(--muted); padding:20px;">No sales found.</td></tr>';
+          tbody.innerHTML = '<tr><td colspan="10" style="text-align:center; color:var(--muted); padding:20px;">No sales found.</td></tr>';
           return;
         }
 
+        const me = appData.currentUser || {};
         filtered.forEach((r, i) => {
           const tr = document.createElement('tr');
           const dateStr = r.date || (r.timestamp ? r.timestamp.substring(0, 10) : '—');
           const locStr = r.subLocation ? `${r.location} (${r.subLocation})` : r.location;
+          const canEdit = me.isAdmin || String(r.recordedBy).toLowerCase() === String(me.name || '').toLowerCase();
+          const editedBadge = r.editedAt
+            ? ` <span class="badge badge-orange" title="Edited by ${escapeHtml(r.editedBy)}">edited</span>`
+            : '';
 
           tr.innerHTML = `
             <td>${i + 1}</td>
-            <td>${dateStr}</td>
-            <td><strong>${r.bookName}</strong></td>
+            <td>${escapeHtml(dateStr)}</td>
+            <td><strong>${escapeHtml(r.bookName)}</strong>${editedBadge}</td>
             <td>${r.quantity}</td>
             <td>₹${r.totalAmount.toLocaleString('en-IN')}</td>
-            <td>${locStr}</td>
-            <td>${r.sellerName}</td>
-            <td><span class="badge badge-blue">${r.recordedBy}</span></td>
-            <td style="color:var(--muted);">${r.notes || '—'}</td>
+            <td>${escapeHtml(locStr)}</td>
+            <td>${escapeHtml(r.sellerName)}</td>
+            <td><span class="badge badge-blue">${escapeHtml(r.recordedBy)}</span></td>
+            <td style="color:var(--muted);">${escapeHtml(r.notes) || '—'}</td>
+            <td>${canEdit ? `<button type="button" class="target-save-btn" data-edit-sale="${escapeHtml(r.saleId)}">Edit</button>` : ''}</td>
           `;
           tbody.appendChild(tr);
         });
@@ -2430,7 +2704,7 @@ ${bookListStr}`;
             showToast(res.message);
             google.script.run.withSuccessHandler(onLookupLoaded).getLookupData(getSessionToken());
           })
-          .updateVolunteerRole(volId, newRole);
+          .updateVolunteerRole(volId, newRole, getSessionToken());
       }
 
       function toggleVolunteer(volId, makeActive) {
@@ -2439,7 +2713,7 @@ ${bookListStr}`;
             showToast(res.message);
             google.script.run.withSuccessHandler(onLookupLoaded).getLookupData(getSessionToken());
           })
-          .toggleVolunteerStatus(volId, makeActive);
+          .toggleVolunteerStatus(volId, makeActive, getSessionToken());
       }
 
       function bindEventListeners() {
@@ -2547,7 +2821,7 @@ ${bookListStr}`;
           const pin = document.getElementById('loginPinInput').value.trim();
 
           if (!username) { showToast('Please enter your username.', false); return; }
-          if (!pin) { showToast('Please enter your PIN.', false); return; }
+          if (!/^\d{4,6}$/.test(pin)) { showToast('Enter your current PIN (4-6 digits).', false); return; }
 
           showToast('Signing in...');
           google.script.run
@@ -2555,7 +2829,10 @@ ${bookListStr}`;
               if (res.success) {
                 storeSessionToken(res.token, res.currentUser.volunteerId);
                 document.getElementById('loginModal').style.display = 'none';
-                loadAppDataWithToken(res.token);
+                document.getElementById('loginPinInput').value = '';
+                // The login response already carries the app data, so no second round trip.
+                if (res.lookup && res.lookup.currentUser) onLookupLoaded(res.lookup);
+                else loadAppDataWithToken(res.token);
                 showToast(`Welcome back, ${res.currentUser.name}!`);
               } else {
                 showToast(res.message, false);
@@ -2569,15 +2846,8 @@ ${bookListStr}`;
         document.getElementById('btnLogout').addEventListener('click', () => {
           if (confirm('Log out of this device? You will need your PIN to log back in.')) {
             const token = getSessionToken();
-            clearActiveSession();
-            if (!token) {
-              location.reload();
-              return;
-            }
-            google.script.run
-              .withSuccessHandler(() => location.reload())
-              .withFailureHandler(() => location.reload())
-              .revokeSessionToken(token);
+            resetToLoginScreen();
+            if (token) google.script.run.revokeSessionToken(token);
           }
         });
 
@@ -2624,8 +2894,7 @@ ${bookListStr}`;
               invalidateCachedData('priceInsights');
               invalidateCachedData('targets:');
               invalidateCachedData('salesSummary:');
-              allSalesRecords = null;
-              invalidateCachedData('sales:');
+              invalidateCachedData('eventSales:');
               invalidateCachedData('history:');
             })
             .withFailureHandler((err) => showToast(err.message, false))
@@ -2642,10 +2911,17 @@ ${bookListStr}`;
           google.script.run
             .withSuccessHandler((res) => {
               showToast(res.message);
-              google.script.run.withSuccessHandler(onLookupLoaded).getLookupData(getSessionToken());
+              if (res.location) {
+                appData.locations.push(res.location);
+                populateDropdowns();
+                document.getElementById('eventLocation').value = res.location.locationName;
+                localStorage.setItem(LAST_SALE_LOCATION_KEY, res.location.locationName);
+                updateSubLocationSuggestions();
+                writeLookupCache(appData);
+              }
             })
             .withFailureHandler((err) => showToast(err.message, false))
-            .addNewLocation(locName.trim(), target);
+            .addNewLocation(locName.trim(), target, getSessionToken());
         });
 
         // Add Volunteer Submit (Admin Feature)
@@ -2686,7 +2962,7 @@ ${bookListStr}`;
           const newPin = document.getElementById('newPinInput').value.trim();
           const confirmPin = document.getElementById('confirmNewPinInput').value.trim();
           if (!currentPin) { showToast('Enter your current PIN.', false); return; }
-          if (!/^\d{4,6}$/.test(newPin)) { showToast('New PIN must be 4 to 6 digits.', false); return; }
+          if (!/^\d{4}$/.test(newPin)) { showToast('New PIN must be exactly 4 digits.', false); return; }
           if (newPin !== confirmPin) { showToast('New PIN entries do not match.', false); return; }
 
           const button = event.currentTarget;
@@ -2767,7 +3043,7 @@ ${bookListStr}`;
               renderBulkReviewTable(res);
             })
             .withFailureHandler((err) => showToast(err.message, false))
-            .previewAndMatchBulkStock(text);
+            .previewAndMatchBulkStock(text, getSessionToken());
         });
 
         // Confirm Bulk Allocation
@@ -2808,6 +3084,48 @@ ${bookListStr}`;
             })
             .withFailureHandler((err) => showToast(err.message, false))
             .adjustInventory(finalItems, vol, adjustment, getSessionToken());
+        });
+
+        // Edit a recorded sale
+        attachBookTypeahead(document.getElementById('editSaleBook'), document.getElementById('editSaleDropdown'));
+        document.getElementById('historyTable').addEventListener('click', (event) => {
+          const editButton = event.target.closest('[data-edit-sale]');
+          if (editButton) openEditSaleModal(editButton.dataset.editSale);
+        });
+        document.getElementById('btnCancelEditSale').addEventListener('click', closeEditSaleModal);
+        document.getElementById('btnSaveEditSale').addEventListener('click', (event) => {
+          if (!editingSale) return;
+          const updates = {
+            bookName: document.getElementById('editSaleBook').value.trim(),
+            quantity: parseInt(document.getElementById('editSaleQty').value, 10),
+            unitPrice: Number(document.getElementById('editSalePrice').value),
+            sellerName: document.getElementById('editSaleSeller').value.trim(),
+            notes: document.getElementById('editSaleNotes').value.trim()
+          };
+          if (!updates.bookName) { showToast('Please select a book title.', false); return; }
+          if (!Number.isInteger(updates.quantity) || updates.quantity < 1) { showToast('Quantity must be at least 1.', false); return; }
+          if (document.getElementById('editSalePrice').value === '' || !Number.isFinite(updates.unitPrice) || updates.unitPrice < 0) {
+            showToast('Enter a valid unit price.', false);
+            return;
+          }
+          if (!updates.sellerName) { showToast('Please select who sold it.', false); return; }
+
+          const button = event.currentTarget;
+          button.disabled = true;
+          google.script.run
+            .withSuccessHandler((res) => {
+              button.disabled = false;
+              Object.assign(editingSale, res.sale);
+              closeEditSaleModal();
+              ['history:', 'priceInsights', 'targets:', 'salesSummary:', 'eventSales:'].forEach(invalidateCachedData);
+              renderHistoryTable();
+              showToast(res.message);
+            })
+            .withFailureHandler((err) => {
+              button.disabled = false;
+              showToast(err.message, false);
+            })
+            .updateSale(editingSale.saleId, updates, getSessionToken());
         });
 
         // History Filters

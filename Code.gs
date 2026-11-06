@@ -15,9 +15,68 @@ const SHEET_NAMES = {
 };
 const SESSION_TOKEN_PROPERTY_PREFIX = 'bookstall_session_';
 const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000;
+const ROWS_CACHE_PREFIX = 'rows_';
+const SCHEMA_CACHE_KEY = 'schema_ready_v3';
+
+let spreadsheetMemo_ = null;
+const sheetMemo_ = {};
+
+function getSpreadsheet_() {
+  if (!spreadsheetMemo_) spreadsheetMemo_ = SpreadsheetApp.getActiveSpreadsheet();
+  return spreadsheetMemo_;
+}
+
+function isInactiveValue_(value) {
+  return ['0', 'false', 'no', 'n', 'inactive', 'disabled'].includes(String(value ?? 'true').trim().toLowerCase());
+}
+
+function getAllRowsCached_(sheetName, ttlSeconds) {
+  const cache = CacheService.getScriptCache();
+  const key = ROWS_CACHE_PREFIX + sheetName;
+  const hit = cache.get(key);
+  if (hit) {
+    try { return JSON.parse(hit); } catch (e) { /* fall through to a fresh read */ }
+  }
+  const rows = getAllRows(sheetName);
+  try { cache.put(key, JSON.stringify(rows), ttlSeconds); } catch (e) { /* value over the 100KB cache limit */ }
+  return rows;
+}
+
+function invalidateRowsCache_(sheetName) {
+  CacheService.getScriptCache().remove(ROWS_CACHE_PREFIX + sheetName);
+}
+
+function revokeSessionsForVolunteer_(volunteerId) {
+  const properties = PropertiesService.getScriptProperties();
+  Object.entries(properties.getProperties()).forEach(([key, value]) => {
+    if (!key.startsWith(SESSION_TOKEN_PROPERTY_PREFIX)) return;
+    try {
+      if (String(JSON.parse(value).volunteerId) === String(volunteerId)) properties.deleteProperty(key);
+    } catch (e) {
+      properties.deleteProperty(key);
+    }
+  });
+}
+
+function buildUser_(user) {
+  const role = String(user.role || 'user').trim().toLowerCase();
+  return {
+    volunteerId: String(user.volunteerId || ''),
+    name: String(user.name || '').trim(),
+    email: String(user.email || '').trim(),
+    role: role,
+    isAdmin: role === 'admin'
+  };
+}
 
 function getSheetByName(sheetName) {
-  const spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
+  const key = sheetName.trim().toLowerCase();
+  if (!sheetMemo_[key]) sheetMemo_[key] = findSheet_(sheetName);
+  return sheetMemo_[key];
+}
+
+function findSheet_(sheetName) {
+  const spreadsheet = getSpreadsheet_();
   const sheets = spreadsheet.getSheets();
 
   for (let s of sheets) {
@@ -62,14 +121,16 @@ function getAllRows(sheetName) {
   });
 }
 
-function ensureSheetsExist() {
+// Schema checks are expensive, so they run at most once an hour unless forced.
+function ensureSheetsExist(force) {
+  if (!force && CacheService.getScriptCache().get(SCHEMA_CACHE_KEY)) return;
   const defaultHeaders = {
-    Books: ['bookId', 'bookName', 'category', 'language', 'active'],
+    Books: ['bookId', 'bookName', 'category', 'language', 'active', 'aliases'],
     Locations: ['locationId', 'locationName', 'monthlyTarget', 'active'],
     Volunteers: ['volunteerId', 'name', 'email', 'role', 'pin', 'active', 'username'],
     Events: ['eventId', 'location', 'subLocation', 'date', 'volunteers', 'interactions', 'durationHours', 'booksDistributed', 'appInstalls', 'status', 'startTime'],
     Stock: ['stockId', 'bookName', 'volunteerName', 'quantityReceived', 'quantityRemaining'],
-    Sales: ['saleId', 'timestamp', 'bookName', 'eventId', 'location', 'subLocation', 'sellerName', 'stockOwnerName', 'quantity', 'unitPrice', 'recordedBy', 'notes']
+    Sales: ['saleId', 'timestamp', 'bookName', 'eventId', 'location', 'subLocation', 'sellerName', 'stockOwnerName', 'quantity', 'unitPrice', 'recordedBy', 'notes', 'editedBy', 'editedAt']
   };
 
   Object.entries(defaultHeaders).forEach(([sheetName, headers]) => {
@@ -102,7 +163,10 @@ function ensureSheetsExist() {
       ['LOC007', 'Bellandur', 80, 'True']
     ];
     locSheet.getRange(locSheet.getLastRow() + 1, 1, defaultLocs.length, 4).setValues(defaultLocs);
+    invalidateRowsCache_(SHEET_NAMES.locations);
   }
+
+  CacheService.getScriptCache().put(SCHEMA_CACHE_KEY, '1', 3600);
 }
 
 // =============================================================================
@@ -140,13 +204,16 @@ function backfillUsernames_() {
     while (taken.has(candidate)) candidate = base + suffix++;
     taken.add(candidate);
     sheet.getRange(i + 1, userIdx + 1).setValue(candidate);
+    invalidateRowsCache_(SHEET_NAMES.volunteers);
   }
 }
 
 function createSessionToken(volunteerId) {
   const properties = PropertiesService.getScriptProperties();
   const now = Date.now();
-  Object.entries(properties.getProperties()).forEach(([key, value]) => {
+  // Sweeping every login is slow; expired tokens are also rejected on use.
+  const sessionEntries = Math.random() < 0.1 ? Object.entries(properties.getProperties()) : [];
+  sessionEntries.forEach(([key, value]) => {
     if (!key.startsWith(SESSION_TOKEN_PROPERTY_PREFIX)) return;
     try {
       const session = JSON.parse(value);
@@ -170,44 +237,39 @@ function createSessionToken(volunteerId) {
 
 function loginWithCredentials(username, inputPin) {
   ensureSheetsExist();
-  const rows = getAllRows(SHEET_NAMES.volunteers);
   const targetUsername = normalizeUsername_(username);
   const pinEntered = String(inputPin || '').trim();
+  const findUser = () => getAllRows(SHEET_NAMES.volunteers)
+    .find((v) => normalizeUsername_(v.username) === targetUsername);
 
-  const user = targetUsername && rows.find((v) => normalizeUsername_(v.username) === targetUsername);
-  const targetId = user ? String(user.volunteerId || '').trim() : '';
-
-  if (!user) {
-    return { success: false, message: 'Invalid username or PIN.' };
+  let user = targetUsername ? findUser() : null;
+  if (!user && targetUsername) {
+    // A volunteer added by hand in the sheet may not have a username yet.
+    ensureSheetsExist(true);
+    user = findUser();
   }
 
-  const actVal = String(user.active ?? 'true').trim().toLowerCase();
-  if (['0', 'false', 'no', 'inactive'].includes(actVal)) {
-    return { success: false, message: 'Your volunteer account is currently disabled. Contact admin.' };
-  }
+  const genericFailure = { success: false, message: 'Invalid username or PIN.' };
+  if (!user) return genericFailure;
 
   const storedPin = String(user.pin !== undefined && user.pin !== null ? user.pin : '').trim();
-
   if (!storedPin) {
     return { success: false, message: 'No PIN is set for this account. Contact admin.' };
   }
-  if (storedPin !== pinEntered) {
-    return { success: false, message: 'Invalid username or PIN.' };
+  if (storedPin !== pinEntered) return genericFailure;
+
+  if (isInactiveValue_(user.active)) {
+    return { success: false, message: 'Your volunteer account is disabled. Contact admin.' };
   }
 
-  const role = String(user.role || 'user').trim().toLowerCase();
-  const token = createSessionToken(targetId);
+  const currentUser = buildUser_(user);
+  const token = createSessionToken(currentUser.volunteerId);
 
   return {
     success: true,
     token: token,
-    currentUser: {
-      volunteerId: String(user.volunteerId || ''),
-      name: String(user.name || '').trim(),
-      email: String(user.email || '').trim(),
-      role: role,
-      isAdmin: role === 'admin'
-    }
+    currentUser: currentUser,
+    lookup: buildLookupData_(currentUser)
   };
 }
 
@@ -243,22 +305,13 @@ function validateSessionToken(token) {
       return null;
     }
 
-    const rows = getAllRows(SHEET_NAMES.volunteers);
+    const rows = getAllRowsCached_(SHEET_NAMES.volunteers, 60);
     const user = rows.find((v) => String(v.volunteerId || '').trim() === String(session.volunteerId));
 
     if (!user) return null;
+    if (isInactiveValue_(user.active)) return null;
 
-    const actVal = String(user.active ?? 'true').trim().toLowerCase();
-    if (['0', 'false', 'no', 'inactive'].includes(actVal)) return null;
-
-    const role = String(user.role || 'user').trim().toLowerCase();
-    return {
-      volunteerId: String(user.volunteerId || ''),
-      name: String(user.name || '').trim(),
-      email: String(user.email || '').trim(),
-      role: role,
-      isAdmin: role === 'admin'
-    };
+    return buildUser_(user);
   } catch (e) {
     return null;
   }
@@ -285,7 +338,10 @@ function updateVolunteerPinInSheet_(volunteerId, newPin) {
 
   for (let i = 1; i < data.length; i++) {
     if (String(data[i][idIdx] || '').trim() === String(volunteerId).trim()) {
-      sheet.getRange(i + 1, pinIdx + 1).setValue(String(newPin).trim());
+      const pinCell = sheet.getRange(i + 1, pinIdx + 1);
+      pinCell.setNumberFormat('@');
+      pinCell.setValue(String(newPin).trim());
+      invalidateRowsCache_(SHEET_NAMES.volunteers);
       return true;
     }
   }
@@ -298,12 +354,15 @@ function updateVolunteerPinInSheet_(volunteerId, newPin) {
 
 function getLookupData(sessionToken) {
   ensureSheetsExist();
+  return buildLookupData_(validateSessionToken(sessionToken));
+}
 
-  const currentUser = validateSessionToken(sessionToken);
+function buildLookupData_(currentUser) {
+  if (!currentUser) return { currentUser: null };
 
-  const rawBooks = getAllRows(SHEET_NAMES.books);
-  const allVolunteers = getAllRows(SHEET_NAMES.volunteers);
-  const allLocations = getAllRows(SHEET_NAMES.locations);
+  const rawBooks = getAllRowsCached_(SHEET_NAMES.books, 300);
+  const allVolunteers = getAllRowsCached_(SHEET_NAMES.volunteers, 60);
+  const allLocations = getAllRowsCached_(SHEET_NAMES.locations, 300);
   const allEvents = getAllRows(SHEET_NAMES.events);
 
   const activeBooks = [];
@@ -314,6 +373,7 @@ function getLookupData(sessionToken) {
     let name = '';
     let category = '';
     let language = '';
+    let aliases = '';
     let bookId = idx + 1;
     let isActive = true;
 
@@ -327,6 +387,8 @@ function getLookupData(sessionToken) {
         category = strVal;
       } else if (['language', 'lang'].includes(cleanKey)) {
         language = strVal;
+      } else if (['aliases', 'alias', 'englishname', 'searchnames'].includes(cleanKey)) {
+        aliases = strVal;
       } else if (['bookid', 'id', 'sno', 'sn'].includes(cleanKey)) {
         if (strVal) bookId = strVal;
       } else if (['active', 'status', 'isactive'].includes(cleanKey)) {
@@ -337,17 +399,14 @@ function getLookupData(sessionToken) {
     });
 
     if (name && isActive) {
-      activeBooks.push({ bookId, bookName: name, category, language });
+      activeBooks.push({ bookId, bookName: name, category, language, aliases });
       if (category) categoriesSet.add(category);
       if (language) languagesSet.add(language);
     }
   });
 
   const activeVolunteers = allVolunteers
-    .filter((v) => {
-      const act = String(v.active ?? 'true').trim().toLowerCase();
-      return !['0', 'false', 'no', 'inactive'].includes(act);
-    })
+    .filter((v) => !isInactiveValue_(v.active))
     .map((v) => ({
       volunteerId: String(v.volunteerId || ''),
       name: String(v.name || ''),
@@ -362,7 +421,7 @@ function getLookupData(sessionToken) {
     username: String(v.username || ''),
     email: String(v.email || ''),
     role: String(v.role || 'user').toLowerCase(),
-    active: !['0', 'false', 'no', 'inactive'].includes(String(v.active ?? 'true').trim().toLowerCase())
+    active: !isInactiveValue_(v.active)
   }));
 
   const activeLocations = allLocations.filter((l) => {
@@ -616,8 +675,9 @@ function recordMultiItemSale(payload, sessionToken) {
   });
 
   const salesSheet = getSheetByName(SHEET_NAMES.sales);
-  const values = salesSheet.getDataRange().getValues();
-  const headers = values[0].map((h) => String(h || '').trim().toLowerCase());
+  const headers = salesSheet.getRange(1, 1, 1, salesSheet.getLastColumn()).getValues()[0]
+    .map((h) => String(h || '').trim().toLowerCase());
+  const rowsToWrite = [];
 
   const baseTxnId = 'TXN-' + Date.now();
   const timestamp = new Date().toISOString();
@@ -646,8 +706,11 @@ function recordMultiItemSale(payload, sessionToken) {
     setCell('recordedby', recordedBy);
     setCell('notes', notes);
 
-    salesSheet.appendRow(row);
+    rowsToWrite.push(row);
   });
+
+  // One batched write instead of one appendRow call per book.
+  salesSheet.getRange(salesSheet.getLastRow() + 1, 1, rowsToWrite.length, headers.length).setValues(rowsToWrite);
 
   return {
     success: true,
@@ -655,6 +718,68 @@ function recordMultiItemSale(payload, sessionToken) {
     itemCount: payload.items.length,
     message: `Recorded ${payload.items.length} book sale(s) successfully at ${location} (${subLocation}).`
   };
+}
+
+function updateSale(saleId, updates, sessionToken) {
+  ensureSheetsExist();
+  const currentUser = validateSessionToken(sessionToken);
+  if (!currentUser) throw new Error('Your session has expired. Please log in with your PIN again.');
+
+  const id = String(saleId || '').trim();
+  const sheet = getSheetByName(SHEET_NAMES.sales);
+  const values = sheet.getDataRange().getValues();
+  const headers = values[0].map((h) => String(h || '').trim().toLowerCase());
+  const col = (name) => headers.indexOf(name);
+  const rowIdx = id ? values.findIndex((r, i) => i > 0 && String(r[col('saleid')] || '').trim() === id) : -1;
+  if (rowIdx === -1) throw new Error('Sale record not found.');
+
+  const row = values[rowIdx];
+  const recordedBy = String(row[col('recordedby')] || '').trim();
+  if (!currentUser.isAdmin && recordedBy.toLowerCase() !== currentUser.name.toLowerCase()) {
+    throw new Error('You can only edit sales that you recorded.');
+  }
+
+  const bookName = String((updates && updates.bookName) || '').trim();
+  const quantity = Number(updates && updates.quantity);
+  const unitPrice = Number(updates && updates.unitPrice);
+  const sellerName = String((updates && updates.sellerName) || '').trim();
+  const notes = String((updates && updates.notes) || '').trim();
+  if (!bookName) throw new Error('Book title is required.');
+  if (!Number.isInteger(quantity) || quantity <= 0) throw new Error('Quantity must be a whole number of at least 1.');
+  if (!Number.isFinite(unitPrice) || unitPrice < 0) throw new Error('Unit price must be valid.');
+  if (!sellerName) throw new Error('Seller is required.');
+
+  const editedAt = new Date().toISOString();
+  const setIfPresent = (name, val) => { if (col(name) !== -1) row[col(name)] = val; };
+  setIfPresent('bookname', bookName);
+  setIfPresent('quantity', quantity);
+  setIfPresent('unitprice', unitPrice);
+  setIfPresent('sellername', sellerName);
+  setIfPresent('notes', notes);
+  setIfPresent('editedby', currentUser.name);
+  setIfPresent('editedat', editedAt);
+  sheet.getRange(rowIdx + 1, 1, 1, headers.length).setValues([row]);
+
+  return {
+    success: true,
+    message: 'Sale record updated.',
+    sale: {
+      saleId: id, bookName: bookName, quantity: quantity, unitPrice: unitPrice,
+      totalAmount: quantity * unitPrice, sellerName: sellerName, notes: notes,
+      editedBy: currentUser.name, editedAt: editedAt
+    }
+  };
+}
+
+function getEventSales(eventId, sessionToken) {
+  ensureSheetsExist();
+  if (!validateSessionToken(sessionToken)) {
+    throw new Error('Your session has expired. Please log in with your PIN again.');
+  }
+  const id = String(eventId || '').trim();
+  return getAllRows(SHEET_NAMES.sales)
+    .filter((s) => String(s.eventId || '').trim() === id)
+    .map((s) => ({ bookName: String(s.bookName || '').trim(), quantity: Number(s.quantity || 0) }));
 }
 
 function getNormalizedSalesWithLocations() {
@@ -709,13 +834,18 @@ function getNormalizedSalesWithLocations() {
       unitPrice: unitPrice,
       totalAmount: qty * unitPrice,
       recordedBy: String(s.recordedBy || s.sellerName || '').trim(),
-      notes: String(s.notes || '').trim()
+      notes: String(s.notes || '').trim(),
+      editedBy: String(s.editedBy || '').trim(),
+      editedAt: s.editedAt instanceof Date ? s.editedAt.toISOString() : String(s.editedAt || '').trim()
     };
   });
 }
 
-function getLocationAnalyticsAndTargets(monthFilter) {
+function getLocationAnalyticsAndTargets(monthFilter, sessionToken) {
   ensureSheetsExist();
+  if (!validateSessionToken(sessionToken)) {
+    throw new Error('Your session has expired. Please log in with your PIN again.');
+  }
   const sales = getNormalizedSalesWithLocations();
   const locations = getAllRows(SHEET_NAMES.locations);
   const filterMonth = String(monthFilter || '').trim();
@@ -805,8 +935,11 @@ function getLocationAnalyticsAndTargets(monthFilter) {
   };
 }
 
-function getTransactionsHistory(filters) {
+function getTransactionsHistory(filters, sessionToken) {
   ensureSheetsExist();
+  if (!validateSessionToken(sessionToken)) {
+    throw new Error('Your session has expired. Please log in with your PIN again.');
+  }
   const sales = getNormalizedSalesWithLocations();
 
   const filterRecordedBy = String((filters && filters.recordedBy) || '').trim().toLowerCase();
@@ -1091,8 +1224,11 @@ const COMMON_ALIASES = {
   'secretofjoyfulrelationships': 'The Secret of Joyful Relationships HB'
 };
 
-function previewAndMatchBulkStock(rawText) {
-  const lookup = getLookupData('');
+function previewAndMatchBulkStock(rawText, sessionToken) {
+  ensureSheetsExist();
+  const currentUser = validateSessionToken(sessionToken);
+  if (!currentUser) throw new Error('Your session has expired. Please log in with your PIN again.');
+  const lookup = buildLookupData_(currentUser);
   const catalogBooks = lookup.books.map((b) => b.bookName);
   const normalizedCatalogMap = {};
 
@@ -1168,11 +1304,15 @@ function updateLocationTarget(locationId, monthlyTarget, sessionToken) {
   if (rowIdx === -1) throw new Error('Location not found.');
 
   sheet.getRange(rowIdx + 1, targetIdx + 1).setValue(target);
+  invalidateRowsCache_(SHEET_NAMES.locations);
   return { success: true, message: `Monthly target updated to ${target} books.` };
 }
 
-function addNewLocation(locationName, monthlyTarget) {
+function addNewLocation(locationName, monthlyTarget, sessionToken) {
   ensureSheetsExist();
+  if (!validateSessionToken(sessionToken)) {
+    throw new Error('Your session has expired. Please log in with your PIN again.');
+  }
   const locName = String(locationName || '').trim();
   const target = Number(monthlyTarget) > 0 ? Number(monthlyTarget) : 100;
 
@@ -1186,8 +1326,13 @@ function addNewLocation(locationName, monthlyTarget) {
 
   const locId = 'LOC' + String(sheet.getLastRow()).padStart(3, '0');
   sheet.appendRow([locId, locName, target, 'True']);
+  invalidateRowsCache_(SHEET_NAMES.locations);
 
-  return { success: true, message: `Added location: "${locName}" with monthly target of ${target} books.` };
+  return {
+    success: true,
+    location: { locationId: locId, locationName: locName, monthlyTarget: target, active: 'True' },
+    message: `Added location: "${locName}" with monthly target of ${target} books.`
+  };
 }
 
 function addVolunteer(volunteerData, sessionToken) {
@@ -1224,7 +1369,10 @@ function addVolunteer(volunteerData, sessionToken) {
     const idx = sheetHeaders.indexOf(col);
     if (idx !== -1) newRow[idx] = val;
   });
+  const pinIdx = sheetHeaders.indexOf('pin');
+  if (pinIdx !== -1) volSheet.getRange(nextNum + 1, pinIdx + 1).setNumberFormat('@');
   volSheet.appendRow(newRow);
+  invalidateRowsCache_(SHEET_NAMES.volunteers);
   return { success: true, message: `Volunteer "${name}" added. Username: ${username}, initial PIN: 1234 (they can change it after signing in).` };
 }
 
@@ -1234,7 +1382,7 @@ function updateOwnVolunteerPin(currentPin, newPin, sessionToken) {
 
   const enteredPin = String(currentPin || '').trim();
   const updatedPin = String(newPin || '').trim();
-  if (!/^\d{4,6}$/.test(updatedPin)) throw new Error('PIN must be 4 to 6 digits.');
+  if (!/^\d{4}$/.test(updatedPin)) throw new Error('PIN must be exactly 4 digits.');
 
   const rows = getAllRows(SHEET_NAMES.volunteers);
   const user = rows.find((row) => String(row.volunteerId || '').trim() === currentUser.volunteerId);
@@ -1247,7 +1395,12 @@ function updateOwnVolunteerPin(currentPin, newPin, sessionToken) {
   return { success: true, token: token, message: 'Your PIN was updated.' };
 }
 
-function updateVolunteerRole(volunteerId, newRole) {
+function updateVolunteerRole(volunteerId, newRole, sessionToken) {
+  const currentUser = validateSessionToken(sessionToken);
+  if (!currentUser) throw new Error('Your session has expired. Please log in with your PIN again.');
+  if (!currentUser.isAdmin) throw new Error('Only admins can change roles.');
+  if (!['user', 'admin'].includes(String(newRole).trim().toLowerCase())) throw new Error('Invalid role.');
+
   const volSheet = getSheetByName(SHEET_NAMES.volunteers);
   const data = volSheet.getDataRange().getValues();
   const headers = data[0].map((h) => String(h || '').trim().toLowerCase());
@@ -1258,13 +1411,21 @@ function updateVolunteerRole(volunteerId, newRole) {
   for (let i = 1; i < data.length; i++) {
     if (String(data[i][idIdx] || '').trim() === String(volunteerId).trim()) {
       volSheet.getRange(i + 1, roleIdx + 1).setValue(normalizedRole);
+      invalidateRowsCache_(SHEET_NAMES.volunteers);
       return { success: true, message: `Updated volunteer role to ${normalizedRole}.` };
     }
   }
   throw new Error('Volunteer not found.');
 }
 
-function toggleVolunteerStatus(volunteerId, makeActive) {
+function toggleVolunteerStatus(volunteerId, makeActive, sessionToken) {
+  const currentUser = validateSessionToken(sessionToken);
+  if (!currentUser) throw new Error('Your session has expired. Please log in with your PIN again.');
+  if (!currentUser.isAdmin) throw new Error('Only admins can enable or disable volunteers.');
+  if (!makeActive && String(volunteerId).trim() === currentUser.volunteerId) {
+    throw new Error('You cannot disable your own account.');
+  }
+
   const volSheet = getSheetByName(SHEET_NAMES.volunteers);
   const data = volSheet.getDataRange().getValues();
   const headers = data[0].map((h) => String(h || '').trim().toLowerCase());
@@ -1274,6 +1435,8 @@ function toggleVolunteerStatus(volunteerId, makeActive) {
   for (let i = 1; i < data.length; i++) {
     if (String(data[i][idIdx] || '').trim() === String(volunteerId).trim()) {
       volSheet.getRange(i + 1, actIdx + 1).setValue(makeActive ? 'True' : 'False');
+      invalidateRowsCache_(SHEET_NAMES.volunteers);
+      if (!makeActive) revokeSessionsForVolunteer_(volunteerId);
       return { success: true, message: `Volunteer status set to ${makeActive ? 'Active' : 'Inactive'}.` };
     }
   }
